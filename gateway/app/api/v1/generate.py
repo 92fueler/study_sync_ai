@@ -2,6 +2,7 @@
 Generate API Endpoints
 
 Handles artifact generation requests via ADK Synthesis Agent.
+User-triggered generation uses high priority queue.
 """
 
 import uuid
@@ -14,11 +15,78 @@ from app.a2a.client import get_a2a_client
 router = APIRouter()
 
 
+def _enqueue_user_generation(user_id: str, content_id: str, artifact_type: str = "full"):
+    """Enqueue user-triggered generation to high priority queue."""
+    try:
+        from workers.queue import enqueue_generation
+        return enqueue_generation(user_id, content_id, artifact_type, high_priority=True)
+    except Exception as e:
+        print(f"Warning: Failed to enqueue generation: {e}")
+        return None
+
+
 class GenerateRequest(BaseModel):
     user_id: str
     content_ids: Optional[List[str]] = None
     time_available_minutes: Optional[int] = None
     format: Optional[str] = "text"
+
+
+class AsyncGenerateRequest(BaseModel):
+    user_id: str
+    content_id: str
+    artifact_type: str = "full"  # "5min" or "full"
+
+
+@router.post("/async")
+async def generate_artifact_async(request: AsyncGenerateRequest):
+    """
+    Queue artifact generation for background processing.
+    
+    Returns immediately with a job_id. User-triggered = high priority queue.
+    Poll /generate/job/{job_id} for status.
+    """
+    job = _enqueue_user_generation(request.user_id, request.content_id, request.artifact_type)
+    
+    if job is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Job queue unavailable, please try again"
+        )
+    
+    return {
+        "job_id": job.id,
+        "status": "queued",
+        "queue": "high",
+        "message": f"Generation queued for {request.artifact_type} artifact"
+    }
+
+
+@router.get("/job/{job_id}")
+async def get_job_status(job_id: str):
+    """Get the status of a queued generation job."""
+    try:
+        from rq.job import Job
+        from workers.queue import get_redis_connection
+        
+        job = Job.fetch(job_id, connection=get_redis_connection())
+        
+        result = {
+            "job_id": job_id,
+            "status": job.get_status(),
+            "created_at": str(job.created_at) if job.created_at else None,
+            "started_at": str(job.started_at) if job.started_at else None,
+            "ended_at": str(job.ended_at) if job.ended_at else None,
+        }
+        
+        if job.is_finished:
+            result["result"] = job.result
+        elif job.is_failed:
+            result["error"] = str(job.exc_info) if job.exc_info else "Unknown error"
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
 
 @router.post("")

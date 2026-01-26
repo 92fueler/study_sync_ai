@@ -14,6 +14,16 @@ from app.a2a.client import get_a2a_client
 router = APIRouter()
 
 
+def _enqueue_proactive_generation(user_id: str, content_id: str):
+    """Enqueue proactive 5min generation after upload (background, not blocking)."""
+    try:
+        from workers.queue import enqueue_generation
+        enqueue_generation(user_id, content_id, "5min", high_priority=False)
+    except Exception as e:
+        # Don't fail upload if queue is unavailable
+        print(f"Warning: Failed to enqueue generation: {e}")
+
+
 @router.post("")
 async def upload_files(
     user_id: str = Form(...),
@@ -77,12 +87,22 @@ async def upload_files(
                 "error": response.error.get("message", "Unknown error")
             })
         else:
+            # Extract content_id from response for proactive generation
+            content_id = None
+            if isinstance(response.result, dict):
+                content_id = response.result.get("content_id")
+            
             results.append({
                 "filename": file.filename,
                 "status": "processing",
                 "task_id": task_id,
+                "content_id": content_id,
                 "response": response.result
             })
+            
+            # Proactive: queue 5-min summary generation (NEW content philosophy)
+            if content_id:
+                _enqueue_proactive_generation(user_id, content_id)
     
     return {
         "user_id": user_id,
