@@ -112,6 +112,57 @@ services:
       - studysync
 
   # ============================================
+  # WORKERS (RQ-based background job processing)
+  # ============================================
+  generation-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    command: python -m workers.generation_worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - SYNTHESIS_AGENT_URL=http://synthesis-agent:8003
+      - PROFILE_AGENT_URL=http://profile-agent:8002
+      - ORCHESTRATOR_AGENT_URL=http://orchestrator-agent:8005
+    depends_on:
+      - redis
+      - synthesis-agent
+      - profile-agent
+    networks:
+      - studysync
+    restart: unless-stopped
+
+  notification-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    command: python -m workers.notification_worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - ORCHESTRATOR_AGENT_URL=http://orchestrator-agent:8005
+    depends_on:
+      - redis
+      - orchestrator-agent
+    networks:
+      - studysync
+    restart: unless-stopped
+
+  priority-worker:
+    build:
+      context: .
+      dockerfile: workers/Dockerfile
+    command: python -m workers.priority_worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - PLANNER_AGENT_URL=http://planner-agent:8004
+    depends_on:
+      - redis
+      - planner-agent
+    networks:
+      - studysync
+    restart: unless-stopped
+
+  # ============================================
   # INFRASTRUCTURE
   # ============================================
   redis:

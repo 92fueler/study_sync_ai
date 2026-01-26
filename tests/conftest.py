@@ -6,7 +6,12 @@ import sys
 import os
 
 # Add project root to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+# Add gateway to path for gateway tests
+gateway_path = os.path.join(project_root, "gateway")
+sys.path.insert(0, gateway_path)
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
