@@ -5,8 +5,10 @@ Handles sending notifications via various channels.
 """
 
 import os
+import json
 import logging
-import httpx
+
+from workers.adk_client import run_adk_agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,35 +33,26 @@ def send_notification(user_id: str, title: str, body: str, data: dict = None, ch
     logger.info(f"Sending {channel} notification to user={user_id}: {title}")
     
     try:
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                f"{ORCHESTRATOR_AGENT_URL}/a2a/tasks/send",
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tasks/send",
-                    "params": {
-                        "id": f"notify-{user_id}",
-                        "message": {
-                            "role": "user",
-                            "parts": [{"text": str({
-                                "action": "create_notification",
-                                "user_id": user_id,
-                                "title": title,
-                                "body": body,
-                                "channel": channel,
-                                "data": data
-                            })}]
-                        }
-                    }
-                }
-            )
-            result = response.json()
-            
-            if "result" in result:
-                logger.info(f"Notification sent to user={user_id}")
-                return {"status": "success", "notification_id": result["result"].get("notification_id")}
-            else:
-                raise Exception(f"Notification failed: {result.get('error')}")
+        payload = {
+            "skill": "create_notification",
+            "user_id": user_id,
+            "title": title,
+            "body": body,
+            "channel": channel,
+            "data": data,
+        }
+        result = run_adk_agent(
+            ORCHESTRATOR_AGENT_URL,
+            "orchestrator",
+            user_id,
+            json.dumps(payload),
+            timeout=30.0,
+        )
+        parsed = result.get("parsed", {})
+        if isinstance(parsed, dict) and parsed.get("status") == "error":
+            raise Exception(f"Notification failed: {parsed.get('error')}")
+        logger.info(f"Notification sent to user={user_id}")
+        return {"status": "success", "notification_id": parsed.get("notification_id")}
                 
     except Exception as e:
         logger.error(f"Failed to send notification to user={user_id}: {e}")

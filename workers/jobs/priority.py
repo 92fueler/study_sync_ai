@@ -5,8 +5,10 @@ Handles recalculating content priority and clustering.
 """
 
 import os
+import json
 import logging
-import httpx
+
+from workers.adk_client import run_adk_agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,29 +34,17 @@ def recalculate_priority(user_id: str) -> dict:
     logger.info(f"Recalculating priority for user={user_id}")
     
     try:
-        with httpx.Client(timeout=60.0) as client:
-            response = client.post(
-                f"{PLANNER_AGENT_URL}/a2a/tasks/send",
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tasks/send",
-                    "params": {
-                        "id": f"recalc-{user_id}",
-                        "message": {
-                            "role": "user",
-                            "parts": [{"text": f'{{"action": "recalculate_priority", "user_id": "{user_id}"}}'}]
-                        }
-                    }
-                }
-            )
-            result = response.json()
-            
-            if "result" in result:
-                queue_length = len(result["result"].get("queue", []))
-                logger.info(f"Priority recalculated for user={user_id}, queue_length={queue_length}")
-                return {"status": "success", "queue_length": queue_length}
-            else:
-                raise Exception(f"Priority recalc failed: {result.get('error')}")
+        result = run_adk_agent(
+            PLANNER_AGENT_URL,
+            "planner",
+            user_id,
+            json.dumps({"skill": "recalculate_priority", "user_id": user_id}),
+            timeout=60.0,
+        )
+        parsed = result.get("parsed", {})
+        queue_length = len(parsed.get("queue", [])) if isinstance(parsed, dict) else 0
+        logger.info(f"Priority recalculated for user={user_id}, queue_length={queue_length}")
+        return {"status": "success", "queue_length": queue_length}
                 
     except Exception as e:
         logger.error(f"Failed to recalculate priority for user={user_id}: {e}")
@@ -74,29 +64,17 @@ def cluster_topics(user_id: str) -> dict:
     logger.info(f"Clustering topics for user={user_id}")
     
     try:
-        with httpx.Client(timeout=60.0) as client:
-            response = client.post(
-                f"{PLANNER_AGENT_URL}/a2a/tasks/send",
-                json={
-                    "jsonrpc": "2.0",
-                    "method": "tasks/send",
-                    "params": {
-                        "id": f"cluster-{user_id}",
-                        "message": {
-                            "role": "user",
-                            "parts": [{"text": f'{{"action": "cluster_topics", "user_id": "{user_id}"}}'}]
-                        }
-                    }
-                }
-            )
-            result = response.json()
-            
-            if "result" in result:
-                clusters = result["result"].get("clusters", [])
-                logger.info(f"Found {len(clusters)} topic clusters for user={user_id}")
-                return {"status": "success", "cluster_count": len(clusters), "clusters": clusters}
-            else:
-                raise Exception(f"Clustering failed: {result.get('error')}")
+        result = run_adk_agent(
+            PLANNER_AGENT_URL,
+            "planner",
+            user_id,
+            json.dumps({"skill": "cluster_topics", "user_id": user_id}),
+            timeout=60.0,
+        )
+        parsed = result.get("parsed", {})
+        clusters = parsed.get("clusters", []) if isinstance(parsed, dict) else []
+        logger.info(f"Found {len(clusters)} topic clusters for user={user_id}")
+        return {"status": "success", "cluster_count": len(clusters), "clusters": clusters}
                 
     except Exception as e:
         logger.error(f"Failed to cluster topics for user={user_id}: {e}")

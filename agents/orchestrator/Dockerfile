@@ -9,4 +9,4 @@ COPY agents/orchestrator/ ./orchestrator/
 
 EXPOSE 8005
 
-CMD ["adk", "api_server", "--port", "8005", "orchestrator"]
+CMD ["adk", "api_server", "--host", "0.0.0.0", "--port", "8005", "."]

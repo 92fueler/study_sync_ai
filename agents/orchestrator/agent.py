@@ -11,7 +11,8 @@ from .tools import (
 )
 
 root_agent = LlmAgent(
-    model="gemini-2.0-flash",
+    # TODO: Switch to gemini-3 when it's generally available and stable.
+    model="gemini-2.5-flash",
     name="orchestrator_agent",
     description="Coordinates background content generation and manages the notification system",
     instruction="""You are the Orchestrator Agent for StudySync AI. You coordinate background workflows and notifications.

@@ -39,8 +39,12 @@ CREATE TABLE content_items (
 );
 
 -- Index for vector similarity search (clustering)
+-- NOTE: pgvector limits indexed dims to 2000 for vector, so we cast to halfvec.
 CREATE INDEX idx_content_embedding ON content_items 
-  USING ivfflat (embedding vector_cosine_ops);
+  USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops);
+
+-- Query note: use the same cast to leverage the index, e.g.
+-- ORDER BY (embedding::halfvec(3072)) <=> '[...]'
 
 -- Index for deduplication lookup
 CREATE INDEX idx_content_hash ON content_items(content_hash);

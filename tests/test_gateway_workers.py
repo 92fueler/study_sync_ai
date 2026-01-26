@@ -18,7 +18,7 @@ class TestUploadWorkerIntegration:
         from fastapi import UploadFile
         from io import BytesIO
         
-        # Mock A2A client
+        # Mock ADK runtime client
         mock_a2a = AsyncMock()
         mock_response = MagicMock()
         mock_response.error = None
@@ -47,7 +47,7 @@ class TestUploadWorkerIntegration:
         from app.api.v1.upload import upload_files
         from fastapi import UploadFile
         
-        # Mock A2A client with error
+        # Mock ADK runtime client with error
         mock_a2a = AsyncMock()
         mock_response = MagicMock()
         mock_response.error = {"message": "Ingestion failed"}

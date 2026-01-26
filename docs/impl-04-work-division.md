@@ -16,7 +16,7 @@
 ## Phase 1: Agent Scaffolding (Mob Together)
 
 **Duration**: Days 1-2  
-**Goal**: Get all 5 ADK agents running with A2A communication before adding features.
+**Goal**: Get all 5 ADK agents running with ADK runtime communication before adding features.
 
 ### Checklist
 
@@ -24,9 +24,8 @@
 - [ ] Create `docker-compose.yml` with all services
 - [ ] Create base ADK agent template
 - [ ] Create Agent Cards for all 5 agents
-- [ ] Implement A2A client in gateway
-- [ ] Implement A2A endpoints in each agent
-- [ ] Verify agents can communicate (ping-pong test)
+- [ ] Implement ADK runtime client in gateway
+- [ ] Verify agents can communicate via ADK `/run`
 - [ ] Set up Supabase schema (run `init.sql`)
 - [ ] Configure environment variables
 
@@ -34,7 +33,7 @@
 
 1. `docker-compose up` starts all services
 2. Each agent responds at `/.well-known/agent.json`
-3. Gateway can send A2A task to any agent and get response
+3. Gateway can send ADK `/run` to any agent and get response
 4. Database tables exist and are accessible
 
 ---
@@ -50,19 +49,18 @@
 
 | File | Description |
 |------|-------------|
-| `frontend/components/upload/file-dropzone.tsx` | Drag & drop file upload |
-| `frontend/app/(dashboard)/upload/page.tsx` | Upload page |
+| (planned) | Frontend upload UI (not in repo yet) |
 | `gateway/app/api/v1/upload.py` | Upload endpoint |
-| `agents/ingestion/app/tools.py` | `parse_pdf`, `extract_topics`, `generate_embed` |
-| `agents/profile/app/tools.py` | `build_style_dna`, `get_gcal_context` |
+| `agents/ingestion/tools.py` | `parse_pdf`, `extract_topics`, `generate_embed` |
+| `agents/profile/tools.py` | `build_style_dna`, `get_gcal_context` |
 
 **Flow to implement**:
 1. User drops files in dropzone
 2. Frontend uploads to Supabase Storage
 3. Frontend calls `POST /api/v1/upload`
-4. Gateway sends A2A task to Ingestion Agent
+4. Gateway sends ADK `/run` to Ingestion Agent
 5. Ingestion extracts text, topics, embeddings
-6. Gateway sends A2A task to Profile Agent
+6. Gateway sends ADK `/run` to Profile Agent
 7. Profile returns user context
 8. Gateway stores processed data
 
@@ -72,19 +70,17 @@
 
 | File | Description |
 |------|-------------|
-| `frontend/components/results/markdown-renderer.tsx` | Markdown + Mermaid display |
-| `frontend/components/results/effort-badge.tsx` | Time estimate badge |
-| `frontend/app/(dashboard)/results/[id]/page.tsx` | Results page |
+| (planned) | Frontend results view (not in repo yet) |
 | `gateway/app/api/v1/generate.py` | Generate endpoint |
-| `agents/planner/app/tools.py` | `prioritize`, `cluster_topics`, `calc_effort` |
-| `agents/synthesis/app/tools.py` | `generate_note`, `apply_style`, `create_5min_ver` |
+| `agents/planner/tools.py` | `prioritize`, `cluster_topics`, `calc_effort` |
+| `agents/synthesis/tools.py` | `generate_note`, `apply_style`, `create_5min_ver` |
 
 **Flow to implement**:
 1. User clicks "Generate" or system triggers
 2. Frontend calls `POST /api/v1/generate`
-3. Gateway sends A2A task to Profile Agent (get context)
-4. Gateway sends A2A task to Planner Agent (calc priority)
-5. Gateway sends A2A task to Synthesis Agent (generate)
+3. Gateway sends ADK `/run` to Profile Agent (get context)
+4. Gateway sends ADK `/run` to Planner Agent (calc priority)
+5. Gateway sends ADK `/run` to Synthesis Agent (generate)
 6. Synthesis returns artifact + 5-min version
 7. Gateway stores and returns artifact
 8. Frontend renders with Mermaid diagrams
@@ -191,7 +187,7 @@
 
 | Risk | Mitigation |
 |------|------------|
-| A2A complexity | Can collapse to 2 agents (Ingestion+Profile, Synthesis+Planner) |
+| ADK runtime complexity | Can collapse to 2 agents (Ingestion+Profile, Synthesis+Planner) |
 | Gemini API limits | Monitor usage, implement caching early |
 | Time crunch | P0 features only, skip P1/P2 |
 | Live demo fails | Pre-recorded backup video |
@@ -207,7 +203,7 @@
 3. **Priority**: "Here's why this is #1 on your list"
 4. **Time-Aware**: "You have 25 minutes, here's a 25-min version"
 5. **5-Min Always**: Quick version available instantly
-6. **Agent Architecture**: Mention A2A, show agent cards
+6. **Agent Architecture**: Mention ADK runtime, show `/run` flow
 
 ### "Wow" Moments to Aim For
 

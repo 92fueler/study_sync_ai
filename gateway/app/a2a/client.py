@@ -1,7 +1,7 @@
 """
-A2A Client for Gateway
+ADK Runtime Client for Gateway
 
-Handles communication with ADK agents via A2A protocol.
+Handles communication with ADK agents via ADK runtime (sessions + /run).
 """
 
 import uuid
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class A2AResponse:
-    """A2A JSON-RPC 2.0 response."""
+    """Standardized response for ADK runtime calls."""
     result: Optional[Dict[str, Any]] = None
     error: Optional[Dict[str, Any]] = None
     id: Optional[str] = None
@@ -37,12 +37,13 @@ class AgentInfo:
 
 
 class A2AClient:
-    """Client for communicating with ADK agents via A2A protocol."""
+    """Client for communicating with ADK agents via ADK runtime."""
     
     def __init__(self, timeout: float = 60.0):
         self.timeout = timeout
         self._agents: Dict[str, AgentInfo] = {}
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._user_sessions: Dict[str, str] = {}
     
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client."""
@@ -59,6 +60,16 @@ class A2AClient:
     def register_agent(self, name: str, url: str, description: str = ""):
         """Register an agent for communication."""
         self._agents[name] = AgentInfo(name=name, url=url, description=description)
+
+    def ensure_user_session(self, user_id: str, session_id: Optional[str] = None) -> str:
+        """Ensure a stable session ID for a user (one user = one session)."""
+        if user_id in self._user_sessions:
+            return self._user_sessions[user_id]
+        if session_id is None:
+            # Deterministic per user so sessions are stable across processes.
+            session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"studysync:{user_id}"))
+        self._user_sessions[user_id] = session_id
+        return session_id
     
     async def discover_agent(self, url: str) -> Optional[Dict[str, Any]]:
         """Fetch an agent's card from /.well-known/agent.json."""
@@ -79,29 +90,26 @@ class A2AClient:
         session_id: str,
         initial_state: Optional[Dict[str, Any]] = None
     ) -> A2AResponse:
-        """Create an ADK session before calling /run."""
+        """Create an ADK session before calling /run_sse."""
         if agent_name not in self._agents:
             return A2AResponse.error_response(-32001, f"Unknown agent: {agent_name}")
         
         agent = self._agents[agent_name]
         # ADK app name matches the directory name
-        app_name = agent_name 
+        app_name = agent_name
         
         client = await self._get_client()
         try:
-            # ADK session creation endpoint: POST /apps/{app_name}/users/{user_id}/sessions/{session_id}
-            url = f"{agent.url}/apps/{app_name}/users/{user_id}/sessions/{session_id}"
+            # ADK session creation endpoint: POST /apps/{app_name}/users/{user_id}/sessions
+            url = f"{agent.url}/apps/{app_name}/users/{user_id}/sessions"
             response = await client.post(
                 url,
-                json=initial_state or {},
+                json=initial_state or {"id": session_id},
                 headers={"Content-Type": "application/json"}
             )
             
             if response.status_code == 200:
                 return A2AResponse.success(response.json(), session_id)
-            elif response.status_code == 409:
-                # Session already exists - this is OK, we can proceed
-                return A2AResponse.success({"id": session_id, "exists": True}, session_id)
             else:
                 return A2AResponse.error_response(-32004, f"Failed to create session: {response.status_code} {response.text}")
         except httpx.ConnectError as e:
@@ -124,27 +132,22 @@ class A2AClient:
             return A2AResponse.error_response(-32001, f"Unknown agent: {agent_name}")
         
         agent = self._agents[agent_name]
-        task_id = task_id or str(uuid.uuid4())
         user_id = payload.get("user_id", "default")
+        task_id = task_id or self.ensure_user_session(user_id)
         
-        # Create session first (idempotent - will succeed if already exists)
+        # Create session first and use actual session ID returned by ADK
         session_result = await self.create_session(agent_name, user_id, task_id)
         if session_result.error is not None:
-            # If session already exists (409), that's OK - proceed
-            error_msg = ""
-            if isinstance(session_result.error, dict):
-                error_msg = session_result.error.get("message", "")
-            else:
-                error_msg = str(session_result.error)
-            if "already exists" not in error_msg.lower():
-                return session_result
+            return session_result
+        if isinstance(session_result.result, dict):
+            task_id = session_result.result.get("id", task_id)
         
-        # ADK agents expect camelCase field names
+        # ADK api_server expects snake_case fields
         request_body = {
-            "appName": agent_name,  # camelCase - use agent_name directly (e.g., 'ingestion')
-            "userId": user_id,  # camelCase
-            "sessionId": task_id,  # camelCase
-            "newMessage": {  # camelCase
+            "app_name": agent_name,
+            "user_id": user_id,
+            "session_id": task_id,
+            "new_message": {
                 "role": "user",
                 "parts": [{"text": json.dumps({"skill": skill, **payload})}]
             }
@@ -152,28 +155,30 @@ class A2AClient:
         
         client = await self._get_client()
         try:
-            # ADK api_server exposes /run endpoint
+            # ADK api_server exposes /run_sse endpoint
             response = await client.post(
-                f"{agent.url}/run",
+                f"{agent.url}/run_sse",
                 json=request_body,
                 headers={"Content-Type": "application/json"}
             )
             
             if response.status_code == 200:
-                data = response.json()
-                # Extract result from ADK response
-                # ADK returns events, we want the final response
-                if isinstance(data, list):
-                    # Stream of events, get last one with content
-                    for event in reversed(data):
-                        if event.get("content"):
-                            return A2AResponse.success(
-                                {"content": event["content"], "task_id": task_id},
-                                task_id
-                            )
-                    return A2AResponse.success({"events": data, "task_id": task_id}, task_id)
-                else:
-                    return A2AResponse.success(data, task_id)
+                # Parse SSE response - get last event with content
+                text = response.text
+                result = {"task_id": task_id}
+                for line in text.split("\n"):
+                    if line.startswith("data: "):
+                        try:
+                            event = json.loads(line[6:])
+                            if event.get("content"):
+                                result["content"] = event["content"]
+                                parts = event["content"].get("parts", [])
+                                for part in parts:
+                                    if "text" in part:
+                                        result["text"] = part["text"]
+                        except json.JSONDecodeError:
+                            pass
+                return A2AResponse.success(result, task_id)
             else:
                 return A2AResponse.error_response(
                     -32002,
@@ -194,26 +199,21 @@ class A2AClient:
             return A2AResponse.error_response(-32001, f"Unknown agent: {agent_name}")
         
         agent = self._agents[agent_name]
-        session_id = session_id or str(uuid.uuid4())
+        session_id = session_id or self.ensure_user_session(user_id)
         
-        # Create session first (idempotent - will succeed if already exists)
+        # Create session first and use actual session ID returned by ADK
         session_result = await self.create_session(agent_name, user_id, session_id)
         if session_result.error is not None:
-            # If session already exists (409), that's OK - proceed
-            error_msg = ""
-            if isinstance(session_result.error, dict):
-                error_msg = session_result.error.get("message", "")
-            else:
-                error_msg = str(session_result.error)
-            if "already exists" not in error_msg.lower():
-                return session_result
+            return session_result
+        if isinstance(session_result.result, dict):
+            session_id = session_result.result.get("id", session_id)
         
-        # ADK agents expect camelCase field names
+        # ADK api_server expects snake_case fields
         request_body = {
-            "appName": agent_name,  # camelCase - use agent_name directly (e.g., 'ingestion')
-            "userId": user_id,  # camelCase
-            "sessionId": session_id,  # camelCase
-            "newMessage": {  # camelCase
+            "app_name": agent_name,
+            "user_id": user_id,
+            "session_id": session_id,
+            "new_message": {
                 "role": "user",
                 "parts": [{"text": message}]
             }
@@ -222,13 +222,27 @@ class A2AClient:
         client = await self._get_client()
         try:
             response = await client.post(
-                f"{agent.url}/run",
+                f"{agent.url}/run_sse",
                 json=request_body,
                 headers={"Content-Type": "application/json"}
             )
             
             if response.status_code == 200:
-                return A2AResponse.success(response.json(), session_id)
+                text = response.text
+                result = {"session_id": session_id}
+                for line in text.split("\n"):
+                    if line.startswith("data: "):
+                        try:
+                            event = json.loads(line[6:])
+                            if event.get("content"):
+                                result["content"] = event["content"]
+                                parts = event["content"].get("parts", [])
+                                for part in parts:
+                                    if "text" in part:
+                                        result["text"] = part["text"]
+                        except json.JSONDecodeError:
+                            pass
+                return A2AResponse.success(result, session_id)
             else:
                 return A2AResponse.error_response(-32002, f"Agent error: {response.text}")
         except Exception as e:
@@ -255,7 +269,7 @@ class A2AClient:
 
 
 def create_a2a_client() -> A2AClient:
-    """Create an A2A client with all agents registered."""
+    """Create an ADK runtime client with all agents registered."""
     from app.core.config import settings
     
     client = A2AClient()
@@ -272,7 +286,7 @@ _client: Optional[A2AClient] = None
 
 
 async def get_a2a_client() -> A2AClient:
-    """Get or create the A2A client singleton."""
+    """Get or create the ADK runtime client singleton."""
     global _client
     if _client is None:
         _client = create_a2a_client()

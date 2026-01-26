@@ -28,25 +28,12 @@ docker-compose ps
 curl http://localhost:8000/health
 # Expected: {"status": "healthy"}
 
-# Ingestion Agent
+# ADK Agents (may return 404 for /health; this is expected)
 curl http://localhost:8001/health
-# Expected: {"status": "healthy"}
-
-# Profile Agent
 curl http://localhost:8002/health
-# Expected: {"status": "healthy"}
-
-# Synthesis Agent
 curl http://localhost:8003/health
-# Expected: {"status": "healthy"}
-
-# Planner Agent
 curl http://localhost:8004/health
-# Expected: {"status": "healthy"}
-
-# Orchestrator Agent
 curl http://localhost:8005/health
-# Expected: {"status": "healthy"}
 
 # Redis
 docker-compose exec redis redis-cli ping
@@ -57,63 +44,45 @@ docker-compose exec supabase pg_isready
 # Expected: accepting connections
 ```
 
-### 1.3 Agent Card Discovery
+### 1.3 ADK Session & Run Smoke Test
 
 ```bash
-# Verify each agent exposes its Agent Card
-curl http://localhost:8001/.well-known/agent.json | jq .name
-# Expected: "ingestion-agent"
+# Create session
+curl -X POST "http://localhost:8001/apps/ingestion/users/test-user/sessions" \
+  -H "Content-Type: application/json" \
+  -d '{"id":"test-session-123"}' | jq .
 
-curl http://localhost:8002/.well-known/agent.json | jq .name
-# Expected: "profile-agent"
-
-curl http://localhost:8003/.well-known/agent.json | jq .name
-# Expected: "synthesis-agent"
-
-curl http://localhost:8004/.well-known/agent.json | jq .name
-# Expected: "planner-agent"
-
-curl http://localhost:8005/.well-known/agent.json | jq .name
-# Expected: "orchestrator-agent"
+# Run agent
+curl -X POST "http://localhost:8001/run_sse" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app_name": "ingestion",
+    "user_id": "test-user",
+    "session_id": "test-session-123",
+    "new_message": {
+      "role": "user",
+      "parts": [{"text": "Ping"}]
+    }
+  }' | jq .
 ```
 
 ---
 
-## 2. A2A Communication Tests
+## 2. ADK Runtime Communication Tests
 
-### 2.1 Basic Task Send
-
-Test that gateway can send a task to each agent:
+### 2.1 Basic Run via Gateway
 
 ```bash
-# Test Ingestion Agent
-curl -X POST http://localhost:8001/a2a/tasks/send \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tasks/send",
-    "params": {
-      "id": "test-task-1",
-      "message": {
-        "role": "user",
-        "parts": [{"text": "{\"action\": \"ping\"}"}]
-      }
-    }
-  }'
-# Expected: {"jsonrpc": "2.0", "result": {"status": "completed", ...}}
+# Call upload endpoint and verify it triggers ADK /run_sse for ingestion
+curl -X POST http://localhost:8000/api/v1/upload \
+  -F "user_id=test-user" \
+  -F "files=@test.txt"
+# Expected: 200 OK with task_id and content_id in response
 ```
 
-### 2.2 Inter-Agent Communication
+### 2.2 Inter-Agent Orchestration
 
-Verify agents can communicate with each other:
-
-```bash
-# Gateway orchestrates: Profile → Planner flow
-curl -X POST http://localhost:8000/api/v1/test/a2a-chain \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "test-user"}'
-# Expected: Returns combined result from multiple agents
-```
+Not implemented yet (no dedicated chain-test endpoint).
 
 ---
 
@@ -180,8 +149,8 @@ curl -X POST http://localhost:8000/api/v1/upload \
 # Expected: 200 OK with content_id
 
 # Verify in database
-curl http://localhost:8000/api/v1/materials?user_id=test-user
-# Expected: List includes the uploaded file
+docker-compose exec supabase psql -U postgres -d studysync \
+  -c "SELECT id, user_id, status FROM user_materials WHERE user_id = 'test-user' ORDER BY uploaded_at DESC LIMIT 5;"
 ```
 
 ### 4.2 Ingestion Processing
@@ -205,11 +174,12 @@ docker-compose exec supabase psql -U postgres -d studysync \
 ### 5.1 Artifact Generation
 
 ```bash
-# Generate artifact for user
+# Generate artifact for user (requires content_ids until planner parsing is wired)
 curl -X POST http://localhost:8000/api/v1/generate \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "test-user",
+    "content_ids": ["<content-id>"],
     "time_available_minutes": 25
   }'
 # Expected: Returns artifact with:
@@ -226,9 +196,9 @@ curl -X POST http://localhost:8000/api/v1/generate \
 ```bash
 # Retrieve artifact by ID
 curl http://localhost:8000/api/v1/artifacts/{artifact_id}
-# Expected: Same artifact data
+# Expected: Artifact payload (via Synthesis agent)
 
-# Check database
+# Check database (if synthesis tools stored artifacts)
 docker-compose exec supabase psql -U postgres -d studysync \
   -c "SELECT id, artifact_type, estimated_minutes FROM artifacts WHERE user_id = 'test-user';"
 # Expected: Shows generated artifacts
@@ -237,60 +207,30 @@ docker-compose exec supabase psql -U postgres -d studysync \
 ### 5.3 Priority Queue
 
 ```bash
-# Get prioritized queue
-curl http://localhost:8000/api/v1/queue?user_id=test-user
-# Expected: List of content with priority scores and reasoning
+# Get prioritized queue (can take 20-60s due to LLM calls)
+curl --max-time 90 http://localhost:8000/api/v1/queue?user_id=test-user
+# Expected: Response payload from Planner agent (wrapper includes "response")
 ```
 
 ---
 
 ## 6. Background Generation Test
 
-### 6.1 Job Queue
+Background jobs are scheduled via the Orchestrator agent tools (ADK `/run_sse`), not HTTP endpoints.
 
 ```bash
-# Manually enqueue a job
-curl -X POST http://localhost:8005/api/v1/jobs/enqueue \
+# Example: schedule a 5-min job via ADK /run_sse
+curl -X POST "http://localhost:8005/run_sse" \
   -H "Content-Type: application/json" \
   -d '{
+    "app_name": "orchestrator",
     "user_id": "test-user",
-    "job_type": "generate_5min_new",
-    "content_id": "some-content-id"
+    "session_id": "job-session-1",
+    "new_message": {
+      "role": "user",
+      "parts": [{"text": "Schedule generate_5min_new for content_id: some-content-id"}]
+    }
   }'
-# Expected: 200 OK with job_id
-
-# Check job status
-curl http://localhost:8005/api/v1/jobs/{job_id}/status
-# Expected: "QUEUED" then "RUNNING" then "COMPLETED"
-```
-
-### 6.2 Auto-Detection
-
-```bash
-# Upload new content
-curl -X POST http://localhost:8000/api/v1/upload \
-  -F "user_id=test-user" \
-  -F "files=@another-test.txt"
-
-# Wait for orchestrator to detect (5 min poll interval or trigger manually)
-# Check for auto-queued job
-curl http://localhost:8005/api/v1/jobs?user_id=test-user&status=QUEUED
-# Expected: Job auto-created for new content
-```
-
-### 6.3 Throttling
-
-```bash
-# Rapidly enqueue many jobs
-for i in {1..10}; do
-  curl -X POST http://localhost:8005/api/v1/jobs/enqueue \
-    -H "Content-Type: application/json" \
-    -d "{\"user_id\": \"test-user\", \"job_type\": \"generate_5min_new\", \"content_id\": \"content-$i\"}"
-done
-
-# Check concurrent running jobs (max 3 per user)
-curl http://localhost:8005/api/v1/jobs?user_id=test-user&status=RUNNING | jq length
-# Expected: <= 3
 ```
 
 ---
@@ -303,11 +243,11 @@ curl http://localhost:8005/api/v1/jobs?user_id=test-user&status=RUNNING | jq len
 
 # Check for notification created
 curl http://localhost:8000/api/v1/notifications?user_id=test-user
-# Expected: Notification about artifact ready
+# Expected: Wrapper with "response" from Orchestrator agent
 
 # Check badge count
 curl http://localhost:8000/api/v1/notifications/badge?user_id=test-user
-# Expected: {"unread_count": 1}
+# Expected: Wrapper with "response" from Orchestrator agent
 ```
 
 ---
@@ -562,3 +502,24 @@ def _run_async(coro):
 ### 12.5 Python Version
 
 The project targets **Python 3.13** in Docker containers. For local development, Python 3.9+ works but shows deprecation warnings from google-auth.
+
+---
+
+## 13. E2E Smoke Test Script
+
+A single script exists to validate the full gateway + agents + workers flow:
+
+```bash
+./scripts/test/test-e2e-smoke.sh
+```
+
+What it checks:
+- Gateway health
+- Profile create/get (allocates a stable session per user)
+- Upload sample file
+- Priority queue (longer timeout; may take 20-60s)
+- Async generation + polling until complete
+- Notifications fetch
+
+Session policy:
+- **One user = one session** (session id is deterministic from `user_id`), created on profile creation and reused thereafter.

@@ -45,6 +45,8 @@ class ProfileUpdate(BaseModel):
 async def create_profile(profile: ProfileCreate):
     """Create a new user profile."""
     a2a_client = await get_a2a_client()
+    # One user = one session: allocate session ID at account creation.
+    a2a_client.ensure_user_session(profile.user_id)
     
     message = f"""Create a new user profile:
 - user_id: {profile.user_id}
