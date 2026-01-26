@@ -110,10 +110,10 @@ async def generate_artifact(request: GenerateRequest):
         user_id=request.user_id
     )
     
-    if profile_response.error:
+    if profile_response.error_data:
         raise HTTPException(
             status_code=400,
-            detail=f"Failed to get profile: {profile_response.error.get('message')}"
+            detail=f"Failed to get profile: {profile_response.error_data.get('message')}"
         )
     
     # Step 2: Determine time available
@@ -147,10 +147,10 @@ async def generate_artifact(request: GenerateRequest):
         session_id=task_id
     )
     
-    if synthesis_response.error:
+    if synthesis_response.error_data:
         raise HTTPException(
             status_code=500,
-            detail=f"Generation failed: {synthesis_response.error.get('message')}"
+            detail=f"Generation failed: {synthesis_response.error_data.get('message')}"
         )
     
     return {

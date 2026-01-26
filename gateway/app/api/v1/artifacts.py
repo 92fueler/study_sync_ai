@@ -30,8 +30,8 @@ async def list_artifacts(
         user_id=user_id
     )
     
-    if response.error:
-        raise HTTPException(status_code=400, detail=response.error.get("message"))
+    if response.error_data:
+        raise HTTPException(status_code=400, detail=response.error_data.get("message"))
     
     return {"artifacts": [], "response": response.result}
 
@@ -47,7 +47,7 @@ async def get_artifact(artifact_id: str):
         user_id="system"
     )
     
-    if response.error:
+    if response.error_data:
         raise HTTPException(status_code=404, detail="Artifact not found")
     
     return response.result

@@ -41,7 +41,7 @@ async def submit_feedback(feedback: FeedbackCreate):
         user_id=feedback.user_id
     )
     
-    if response.error:
-        raise HTTPException(status_code=400, detail=response.error.get("message"))
+    if response.error_data:
+        raise HTTPException(status_code=400, detail=response.error_data.get("message"))
     
     return {"success": True, "response": response.result}

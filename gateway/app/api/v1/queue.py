@@ -33,8 +33,8 @@ async def get_priority_queue(
         user_id=user_id
     )
     
-    if response.error:
-        return {"queue": [], "error": response.error.get("message")}
+    if response.error_data:
+        return {"queue": [], "error": response.error_data.get("message")}
     
     return {"queue": [], "response": response.result}
 
@@ -50,7 +50,7 @@ async def recalculate_priority(user_id: str = Query(...)):
         user_id=user_id
     )
     
-    if response.error:
-        return {"success": False, "error": response.error.get("message")}
+    if response.error_data:
+        return {"success": False, "error": response.error_data.get("message")}
     
     return {"success": True, "response": response.result}

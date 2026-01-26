@@ -59,8 +59,8 @@ async def create_profile(profile: ProfileCreate):
         user_id=profile.user_id
     )
     
-    if response.error:
-        raise HTTPException(status_code=400, detail=response.error.get("message"))
+    if response.error_data:
+        raise HTTPException(status_code=400, detail=response.error_data.get("message"))
     
     return {"success": True, "response": response.result}
 
@@ -76,7 +76,7 @@ async def get_profile(user_id: str):
         user_id=user_id
     )
     
-    if response.error:
+    if response.error_data:
         raise HTTPException(status_code=404, detail="Profile not found")
     
     return response.result
@@ -103,7 +103,7 @@ async def update_profile(user_id: str, update: ProfileUpdate):
         user_id=user_id
     )
     
-    if response.error:
-        raise HTTPException(status_code=400, detail=response.error.get("message"))
+    if response.error_data:
+        raise HTTPException(status_code=400, detail=response.error_data.get("message"))
     
     return {"success": True, "response": response.result}

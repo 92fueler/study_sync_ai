@@ -8,7 +8,7 @@ from google.adk.agents import LlmAgent
 from .tools import get_priority_queue, recalculate_priority, cluster_topics, calculate_effort
 
 root_agent = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="planner_agent",
     description="Calculates content priority using multi-signal algorithm and manages learning plans",
     instruction="""You are the Planner Agent for StudySync AI. Your role is to prioritize content and plan learning paths.

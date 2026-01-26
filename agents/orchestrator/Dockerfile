@@ -5,8 +5,8 @@ WORKDIR /app
 COPY agents/orchestrator/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY agents/orchestrator/ ./orchestrator/
+COPY agents/orchestrator/ ./orchestrator_agent/
 
 EXPOSE 8005
 
-CMD ["adk", "api_server", "--port", "8005", "orchestrator"]
+CMD ["adk", "api_server", "--host", "0.0.0.0", "--port", "8005", "."]

@@ -29,8 +29,8 @@ async def get_notifications(
         user_id=user_id
     )
     
-    if response.error:
-        return {"notifications": [], "error": response.error.get("message")}
+    if response.error_data:
+        return {"notifications": [], "error": response.error_data.get("message")}
     
     return {"notifications": [], "response": response.result}
 
@@ -46,7 +46,7 @@ async def get_badge_count(user_id: str = Query(...)):
         user_id=user_id
     )
     
-    if response.error:
+    if response.error_data:
         return {"unread_count": 0}
     
     return {"unread_count": 0, "response": response.result}
@@ -63,4 +63,4 @@ async def mark_as_read(notification_id: str):
         user_id="system"
     )
     
-    return {"success": not response.error, "response": response.result}
+    return {"success": not response.error_data, "response": response.result}

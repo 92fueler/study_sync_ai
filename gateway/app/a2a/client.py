@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 class A2AResponse:
     """A2A JSON-RPC 2.0 response."""
     result: Optional[Dict[str, Any]] = None
-    error: Optional[Dict[str, Any]] = None
+    error_data: Optional[Dict[str, Any]] = None
     id: Optional[str] = None
     
     @classmethod
@@ -24,7 +24,7 @@ class A2AResponse:
     
     @classmethod
     def error(cls, code: int, message: str, request_id: Optional[str] = None) -> "A2AResponse":
-        return cls(error={"code": code, "message": message}, id=request_id)
+        return cls(error_data={"code": code, "message": message}, id=request_id)
 
 
 @dataclass
@@ -129,6 +129,31 @@ class A2AClient:
         except Exception as e:
             return A2AResponse.error(-32003, f"Request failed: {str(e)}")
     
+    async def _ensure_session(
+        self,
+        agent: AgentInfo,
+        user_id: str,
+        session_id: str
+    ) -> Optional[str]:
+        """Ensure a session exists, create if needed. Returns actual session ID."""
+        client = await self._get_client()
+        app_name = f"{agent.name}_agent"
+        
+        try:
+            response = await client.post(
+                f"{agent.url}/apps/{app_name}/users/{user_id}/sessions",
+                json={"id": session_id},
+                headers={"Content-Type": "application/json"}
+            )
+            if response.status_code == 200:
+                data = response.json()
+                # Return the actual session ID from response
+                return data.get("id", session_id)
+            return session_id
+        except Exception as e:
+            print(f"Session creation failed: {e}")
+            return None
+
     async def run_agent(
         self,
         agent_name: str,
@@ -143,10 +168,15 @@ class A2AClient:
         agent = self._agents[agent_name]
         session_id = session_id or str(uuid.uuid4())
         
+        # Create session and get actual session ID
+        actual_session_id = await self._ensure_session(agent, user_id, session_id)
+        if not actual_session_id:
+            return A2AResponse.error(-32004, "Failed to create session")
+        
         request_body = {
             "app_name": f"{agent_name}_agent",
             "user_id": user_id,
-            "session_id": session_id,
+            "session_id": actual_session_id,
             "new_message": {
                 "role": "user",
                 "parts": [{"text": message}]
@@ -155,14 +185,34 @@ class A2AClient:
         
         client = await self._get_client()
         try:
+            # Use run_sse endpoint for ADK agents
             response = await client.post(
-                f"{agent.url}/run",
+                f"{agent.url}/run_sse",
                 json=request_body,
                 headers={"Content-Type": "application/json"}
             )
             
             if response.status_code == 200:
-                return A2AResponse.success(response.json(), session_id)
+                # Parse SSE response - get last event with content
+                text = response.text
+                result = {"session_id": actual_session_id}
+                
+                # Parse SSE data lines
+                for line in text.split("\n"):
+                    if line.startswith("data: "):
+                        try:
+                            event = json.loads(line[6:])
+                            if event.get("content"):
+                                result["content"] = event["content"]
+                                # Extract text from parts
+                                parts = event["content"].get("parts", [])
+                                for part in parts:
+                                    if "text" in part:
+                                        result["text"] = part["text"]
+                        except json.JSONDecodeError:
+                            pass
+                
+                return A2AResponse.success(result, actual_session_id)
             else:
                 return A2AResponse.error(-32002, f"Agent error: {response.text}")
         except Exception as e:
