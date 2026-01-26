@@ -1,0 +1,154 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # GATEWAY (API Orchestrator)
+  # ============================================
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - REDIS_URL=redis://redis:6379
+      - INGESTION_AGENT_URL=http://ingestion-agent:8001
+      - PROFILE_AGENT_URL=http://profile-agent:8002
+      - SYNTHESIS_AGENT_URL=http://synthesis-agent:8003
+      - PLANNER_AGENT_URL=http://planner-agent:8004
+      - ORCHESTRATOR_AGENT_URL=http://orchestrator-agent:8005
+    depends_on:
+      supabase:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - studysync
+
+  # ============================================
+  # ADK AGENTS (Google Agent Development Kit)
+  # ============================================
+  ingestion-agent:
+    build:
+      context: .
+      dockerfile: agents/ingestion/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+    depends_on:
+      supabase:
+        condition: service_healthy
+    networks:
+      - studysync
+
+  profile-agent:
+    build:
+      context: .
+      dockerfile: agents/profile/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+    depends_on:
+      supabase:
+        condition: service_healthy
+    networks:
+      - studysync
+
+  synthesis-agent:
+    build:
+      context: .
+      dockerfile: agents/synthesis/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+    depends_on:
+      supabase:
+        condition: service_healthy
+    networks:
+      - studysync
+
+  planner-agent:
+    build:
+      context: .
+      dockerfile: agents/planner/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+    depends_on:
+      supabase:
+        condition: service_healthy
+    networks:
+      - studysync
+
+  orchestrator-agent:
+    build:
+      context: .
+      dockerfile: agents/orchestrator/Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      supabase:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - studysync
+
+  # ============================================
+  # INFRASTRUCTURE
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - studysync
+
+  supabase:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=studysync
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./supabase/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - studysync
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+# ============================================
+# NETWORKS & VOLUMES
+# ============================================
+networks:
+  studysync:
+    driver: bridge
+
+volumes:
+  redis_data:
+  postgres_data:
