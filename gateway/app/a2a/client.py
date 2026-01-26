@@ -247,6 +247,51 @@ class A2AClient:
                 return A2AResponse.error_response(-32002, f"Agent error: {response.text}")
         except Exception as e:
             return A2AResponse.error_response(-32003, f"Request failed: {str(e)}")
+
+    async def stream_agent(
+        self,
+        agent_name: str,
+        message: str,
+        user_id: str = "default",
+        session_id: Optional[str] = None,
+    ):
+        """Stream an ADK agent response via /run_sse."""
+        if agent_name not in self._agents:
+            raise ValueError(f"Unknown agent: {agent_name}")
+
+        agent = self._agents[agent_name]
+        session_id = session_id or self.ensure_user_session(user_id)
+
+        session_result = await self.create_session(agent_name, user_id, session_id)
+        if session_result.error is not None:
+            raise RuntimeError(session_result.error.get("message", "Session creation failed"))
+        if isinstance(session_result.result, dict):
+            session_id = session_result.result.get("id", session_id)
+
+        request_body = {
+            "app_name": agent_name,
+            "user_id": user_id,
+            "session_id": session_id,
+            "new_message": {
+                "role": "user",
+                "parts": [{"text": message}]
+            }
+        }
+
+        client = await self._get_client()
+        async with client.stream(
+            "POST",
+            f"{agent.url}/run_sse",
+            json=request_body,
+            headers={"Content-Type": "application/json"},
+            timeout=None,
+        ) as response:
+            if response.status_code != 200:
+                text = await response.aread()
+                raise RuntimeError(f"Agent error: {response.status_code} {text.decode('utf-8', errors='ignore')}")
+
+            async for chunk in response.aiter_bytes():
+                yield chunk
     
     async def get_task_status(
         self,

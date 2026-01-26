@@ -28,6 +28,8 @@ study_sync_ai/
 │   │   │       ├── router.py      # API router aggregation
 │   │   │       ├── upload.py      # POST /upload
 │   │   │       ├── generate.py    # POST /generate
+│   │   │       ├── chat.py        # POST /chat (SSE)
+│   │   │       ├── content.py     # GET /content
 │   │   │       ├── profile.py     # Profile CRUD
 │   │   │       ├── artifacts.py   # Artifact retrieval
 │   │   │       ├── queue.py       # Priority queue
@@ -36,6 +38,7 @@ study_sync_ai/
 │   │   ├── a2a/
 │   │   │   ├── __init__.py
 │   │   │   └── client.py          # ADK runtime client (sessions + /run)
+│   │   ├── db.py                  # Database helpers (asyncpg pool)
 │   │   ├── core/
 │   │   │   ├── __init__.py
 │   │   │   └── config.py          # Settings (env vars)
