@@ -116,16 +116,22 @@ async def _ingest_content_async(
         # Calculate word count
         word_count = len(content_text.split()) if content_text else 0
         
+        # Convert embedding list to PostgreSQL vector format string
+        # Format: "[0.1, 0.2, 0.3]" for pgvector
+        embedding_str = None
+        if embedding:
+            embedding_str = "[" + ",".join(str(v) for v in embedding) + "]"
+        
         # Store content
         content_row = await conn.fetchrow(
             """
             INSERT INTO content_items 
             (content_hash, title, raw_text, media_type, embedding, topics, word_count)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5::vector, $6, $7)
             RETURNING id
             """,
             content_hash, filename, content_text, media_type,
-            embedding, json.dumps(topics) if topics else None, word_count
+            embedding_str, json.dumps(topics) if topics else None, word_count
         )
         content_id = str(content_row["id"])
         
