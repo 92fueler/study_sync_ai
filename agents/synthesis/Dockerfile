@@ -9,4 +9,4 @@ COPY agents/synthesis/ ./synthesis/
 
 EXPOSE 8003
 
-CMD ["adk", "api_server", "--port", "8003", "synthesis"]
+CMD ["adk", "api_server", "--host", "0.0.0.0", "--port", "8003", "."]

@@ -21,8 +21,10 @@ CREATE TABLE content_items (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_content_embedding ON content_items 
-  USING ivfflat (embedding vector_cosine_ops);
+-- NOTE: pgvector limits indexed dims to 2000 for vector, so we cast to halfvec.
+-- halfvec supports 3072 dims and is suitable for ANN indexing.
+CREATE INDEX IF NOT EXISTS idx_content_embedding ON content_items
+  USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops);
 CREATE INDEX idx_content_hash ON content_items(content_hash);
 
 -- ===========================================

@@ -18,49 +18,6 @@ study_sync_ai/
 │   ├── impl-05-verification.md
 │   └── README.md
 │
-├── frontend/                       # Next.js 14 (App Router)
-│   ├── app/
-│   │   ├── layout.tsx
-│   │   ├── page.tsx               # Landing/redirect
-│   │   ├── (auth)/
-│   │   │   ├── login/page.tsx
-│   │   │   └── callback/page.tsx
-│   │   └── (dashboard)/
-│   │       ├── layout.tsx
-│   │       ├── upload/page.tsx    # Main upload page
-│   │       ├── queue/page.tsx     # Priority queue view
-│   │       └── results/[id]/page.tsx  # Artifact viewer
-│   ├── components/
-│   │   ├── ui/                    # Shared UI (buttons, cards, etc.)
-│   │   ├── upload/
-│   │   │   ├── file-dropzone.tsx
-│   │   │   ├── topic-input.tsx
-│   │   │   ├── format-selector.tsx
-│   │   │   └── style-selector.tsx
-│   │   └── results/
-│   │       ├── markdown-renderer.tsx
-│   │       ├── mermaid-diagram.tsx
-│   │       └── effort-badge.tsx
-│   ├── hooks/
-│   │   ├── use-supabase.ts
-│   │   └── use-generate-artifact.ts
-│   ├── lib/
-│   │   ├── supabase/
-│   │   │   ├── client.ts          # Browser client
-│   │   │   └── server.ts          # Server client
-│   │   ├── api.ts                 # FastAPI client
-│   │   └── offline/
-│   │       ├── cache-manager.ts   # IndexedDB wrapper
-│   │       └── sync-queue.ts      # Offline action queue
-│   ├── public/
-│   │   ├── sw.js                  # Service worker for PWA
-│   │   └── manifest.json
-│   ├── next.config.js
-│   ├── tailwind.config.ts
-│   ├── package.json
-│   ├── Dockerfile
-│   └── .env.local.example
-│
 ├── gateway/                        # FastAPI orchestrator
 │   ├── app/
 │   │   ├── main.py                # FastAPI app entry
@@ -78,86 +35,59 @@ study_sync_ai/
 │   │   │       └── notifications.py
 │   │   ├── a2a/
 │   │   │   ├── __init__.py
-│   │   │   ├── client.py          # A2A task sender
-│   │   │   └── discovery.py       # Agent card registry
+│   │   │   └── client.py          # ADK runtime client (sessions + /run)
 │   │   ├── core/
 │   │   │   ├── __init__.py
 │   │   │   └── config.py          # Settings (env vars)
 │   │   └── schemas/
-│   │       ├── __init__.py
-│   │       ├── generate.py
-│   │       ├── profile.py
-│   │       └── artifacts.py
+│   │       └── __init__.py
 │   ├── requirements.txt
-│   ├── Dockerfile
-│   └── .env.example
+│   └── Dockerfile
 │
 ├── agents/                         # ADK Agents (one per subdirectory)
 │   ├── ingestion/
-│   │   ├── app/
-│   │   │   ├── main.py            # FastAPI + A2A endpoints
-│   │   │   ├── agent.py           # ADK Agent definition
-│   │   │   └── tools.py           # parse_pdf, extract_topics, etc.
-│   │   ├── agent_card.json
+│   │   ├── agent.py               # ADK Agent definition
+│   │   ├── tools.py               # ingest_content, extract_topics, etc.
 │   │   ├── requirements.txt
 │   │   └── Dockerfile
-│   │
 │   ├── profile/
-│   │   ├── app/
-│   │   │   ├── main.py
-│   │   │   ├── agent.py
-│   │   │   └── tools.py           # build_style_dna, get_gcal, etc.
-│   │   ├── agent_card.json
+│   │   ├── agent.py
+│   │   ├── tools.py               # create_profile, get_calendar_context, etc.
 │   │   ├── requirements.txt
 │   │   └── Dockerfile
-│   │
 │   ├── synthesis/
-│   │   ├── app/
-│   │   │   ├── main.py
-│   │   │   ├── agent.py
-│   │   │   └── tools.py           # generate_note, create_5min_ver, etc.
-│   │   ├── agent_card.json
+│   │   ├── agent.py
+│   │   ├── tools.py               # generate_note, create_5min_ver, etc.
 │   │   ├── requirements.txt
 │   │   └── Dockerfile
-│   │
 │   ├── planner/
-│   │   ├── app/
-│   │   │   ├── main.py
-│   │   │   ├── agent.py
-│   │   │   └── tools.py           # prioritize, cluster, calc_effort, etc.
-│   │   ├── agent_card.json
+│   │   ├── agent.py
+│   │   ├── tools.py               # prioritize, cluster, calc_effort, etc.
 │   │   ├── requirements.txt
 │   │   └── Dockerfile
-│   │
 │   └── orchestrator/
-│       ├── app/
-│       │   ├── main.py
-│       │   ├── agent.py
-│       │   └── tools.py           # detect_changes, schedule_gen, etc.
-│       ├── agent_card.json
+│       ├── agent.py
+│       ├── tools.py               # detect_changes, schedule_gen, etc.
 │       ├── requirements.txt
 │       └── Dockerfile
 │
 ├── workers/                        # Background job workers
-│   ├── app/
-│   │   ├── main.py                # Worker entry point
-│   │   ├── generation_worker.py   # Calls Synthesis Agent
-│   │   └── notification_worker.py # Sends notifications
+│   ├── generation_worker.py        # Calls Synthesis Agent
+│   ├── notification_worker.py      # Sends notifications
+│   ├── priority_worker.py          # Recalculates priority queue
+│   ├── queue.py                    # RQ queue helpers
+│   ├── jobs/                       # Job implementations
 │   ├── requirements.txt
 │   └── Dockerfile
-│
-├── shared/                         # Shared Python utilities
-│   ├── __init__.py
-│   ├── a2a_protocol.py            # A2A message types
-│   ├── gemini_client.py           # Shared Gemini 3 wrapper
-│   └── supabase_client.py         # Shared Supabase client
 │
 ├── supabase/                       # Database initialization
 │   └── init.sql                   # Full schema DDL
 │
+├── scripts/                        # Dev + test scripts
+├── tests/                          # Unit/integration tests
 ├── docker-compose.yml
 ├── .env.example
-├── .gitignore
+├── pytest.ini
 └── README.md
 ```
 
@@ -178,36 +108,24 @@ study_sync_ai/
 
 ## Module Organization
 
-### Frontend Modules
+### Frontend Modules (Not Implemented Yet)
 
-```
-frontend/
-├── app/           # Next.js App Router pages
-├── components/    # Reusable UI components
-│   ├── ui/        # Generic (buttons, cards, modals)
-│   ├── upload/    # Upload-specific components
-│   └── results/   # Result display components
-├── hooks/         # Custom React hooks
-└── lib/           # Utilities and clients
-    ├── supabase/  # Supabase client setup
-    └── offline/   # PWA/offline support
-```
+The frontend is planned but not present in the current repo.
 
 ### Gateway Modules
 
 ```
 gateway/app/
 ├── api/v1/        # HTTP endpoints (versioned)
-├── a2a/           # A2A protocol handling
+├── a2a/           # ADK runtime client (sessions + /run)
 ├── core/          # Configuration, middleware
-└── schemas/       # Pydantic models
+└── schemas/       # Pydantic models (TBD)
 ```
 
 ### Agent Modules
 
 ```
-agents/{name}/app/
-├── main.py        # FastAPI app with A2A endpoints
+agents/{name}/
 ├── agent.py       # ADK Agent definition
 └── tools.py       # Agent-specific tools
 ```
@@ -219,12 +137,11 @@ agents/{name}/app/
 | Purpose | File Path |
 |---------|-----------|
 | Gateway entry | `gateway/app/main.py` |
-| A2A client | `gateway/app/a2a/client.py` |
+| ADK runtime client | `gateway/app/a2a/client.py` |
 | Upload endpoint | `gateway/app/api/v1/upload.py` |
 | Generate endpoint | `gateway/app/api/v1/generate.py` |
-| Synthesis agent | `agents/synthesis/app/agent.py` |
-| Planner agent | `agents/planner/app/agent.py` |
-| File dropzone | `frontend/components/upload/file-dropzone.tsx` |
-| Markdown renderer | `frontend/components/results/markdown-renderer.tsx` |
+| Synthesis agent | `agents/synthesis/agent.py` |
+| Planner agent | `agents/planner/agent.py` |
+| Orchestrator tools | `agents/orchestrator/tools.py` |
 | Database schema | `supabase/init.sql` |
 | Docker config | `docker-compose.yml` |

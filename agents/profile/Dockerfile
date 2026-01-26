@@ -9,4 +9,4 @@ COPY agents/profile/ ./profile/
 
 EXPOSE 8002
 
-CMD ["adk", "api_server", "--port", "8002", "profile"]
+CMD ["adk", "api_server", "--host", "0.0.0.0", "--port", "8002", "."]

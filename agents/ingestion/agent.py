@@ -9,7 +9,8 @@ from .tools import ingest_content, extract_topics, generate_embedding
 
 # Root agent exported for ADK
 root_agent = LlmAgent(
-    model="gemini-2.0-flash",
+    # TODO: Switch to gemini-3 when it's generally available and stable.
+    model="gemini-2.5-flash",
     name="ingestion_agent",
     description="Parses uploaded content, extracts topics, and generates embeddings for StudySync AI",
     instruction="""You are the Ingestion Agent for StudySync AI. Your role is to:

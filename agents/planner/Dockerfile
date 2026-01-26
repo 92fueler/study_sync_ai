@@ -9,4 +9,4 @@ COPY agents/planner/ ./planner/
 
 EXPOSE 8004
 
-CMD ["adk", "api_server", "--port", "8004", "planner"]
+CMD ["adk", "api_server", "--host", "0.0.0.0", "--port", "8004", "."]

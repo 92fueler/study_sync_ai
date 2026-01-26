@@ -27,7 +27,7 @@
 - Executive summary and value proposition
 - Design principles (Proactive > Reactive, NEW vs RE-GEN philosophy)
 - Architecture diagrams
-- Agent responsibilities and A2A communication
+- Agent responsibilities and ADK runtime communication
 - API contracts
 - Workflow walkthroughs
 - Multi-signal priority algorithm
@@ -85,7 +85,7 @@ The `impl-*.md` files contain technical details for building the system:
 
 | Decision | Choice |
 |----------|--------|
-| Agent communication | A2A Protocol (Google standard) |
+| Agent communication | ADK runtime (sessions + /run) |
 | Gemini SDK | `google-genai` (modern SDK, not deprecated `google-generativeai`) |
 | Text generation model | `gemini-2.5-flash` |
 | Embedding model | `gemini-embedding-001` (3072 dimensions) |

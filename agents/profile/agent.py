@@ -8,7 +8,8 @@ from google.adk.agents import LlmAgent
 from .tools import create_profile, get_profile, update_profile, get_calendar_context, record_feedback
 
 root_agent = LlmAgent(
-    model="gemini-2.0-flash",
+    # TODO: Switch to gemini-3 when it's generally available and stable.
+    model="gemini-2.5-flash",
     name="profile_agent",
     description="Manages user profiles, learning preferences (Style DNA), and calendar integration for StudySync AI",
     instruction="""You are the Profile Agent for StudySync AI. Your role is to:

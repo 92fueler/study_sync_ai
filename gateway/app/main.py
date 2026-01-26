@@ -1,7 +1,7 @@
 """
 StudySync AI Gateway - Main FastAPI Application
 
-Central orchestrator that routes requests to ADK agents via A2A protocol.
+Central orchestrator that routes requests to ADK agents via ADK runtime (sessions + /run).
 """
 
 import os
@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="StudySync AI Gateway",
-    description="API Gateway for StudySync AI - Orchestrates ADK agents via A2A protocol",
+    description="API Gateway for StudySync AI - Orchestrates ADK agents via ADK runtime",
     version="1.0.0",
     lifespan=lifespan
 )

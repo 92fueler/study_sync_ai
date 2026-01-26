@@ -8,7 +8,8 @@ from google.adk.agents import LlmAgent
 from .tools import generate_artifact, generate_5min_summary, get_artifact, list_artifacts
 
 root_agent = LlmAgent(
-    model="gemini-2.0-flash",
+    # TODO: Switch to gemini-3 when it's generally available and stable.
+    model="gemini-2.5-flash",
     name="synthesis_agent",
     description="Generates personalized study materials by applying user's Style DNA to source content",
     instruction="""You are the Synthesis Agent for StudySync AI. Your role is to generate personalized learning artifacts.

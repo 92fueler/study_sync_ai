@@ -67,7 +67,7 @@ Every output should reflect the user's:
 │                                                                              │
 │  ┌─────────────┐     ┌──────────────────────────────────────────────────┐   │
 │  │   Next.js   │     │           ADK Agent Orchestration Layer           │   │
-│  │  Frontend   │◄───►│                  (A2A Protocol)                   │   │
+│  │  Frontend   │◄───►│             (ADK Runtime /run_sse)                │   │
 │  │  (Port 3000)│     │                                                   │   │
 │  └─────────────┘     │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────┐ │   │
 │         │            │  │Ingestion │ │ Profile  │ │Synthesis │ │Planner│ │   │
@@ -85,7 +85,7 @@ Every output should reflect the user's:
 │         │                                     │                              │
 │         ▼                                     ▼                              │
 │  ┌─────────────┐                    ┌─────────────────┐                     │
-│  │  FastAPI    │◄──────────────────►│  Gemini 3       │                     │
+│  │  FastAPI    │◄──────────────────►│  Gemini 2.5     │                     │
 │  │  Gateway    │                    │  Multimodal     │                     │
 │  │ (Port 8000) │                    │  (Reasoning +   │                     │
 │  └─────────────┘                    │   Vision +      │                     │
@@ -108,27 +108,26 @@ Every output should reflect the user's:
 
 ---
 
-## 4. Agent Architecture (ADK + A2A Protocol)
+## 4. Agent Architecture (ADK Runtime)
 
-### 4.1 Why A2A?
-Google's Agent-to-Agent (A2A) protocol provides:
-- **Interoperability**: Standard way for agents to discover and communicate
-- **Async task handling**: Long-running generation jobs with status tracking
-- **Capability discovery**: Agent Cards advertise what each agent can do
-- **Loose coupling**: Agents can be developed/deployed independently
+### 4.1 Why ADK Runtime?
+We currently use Google ADK's `api_server` runtime for inter-agent calls:
+- **Working SoT**: Matches the ADK `api_server` session + `/run_sse` flow
+- **Loose coupling**: Agents remain independently deployable
+- **Future A2A**: We can add A2A JSON-RPC compatibility later if needed
 
-### 4.2 Agent Network
+### 4.2 Agent Network (ADK Runtime)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         A2A Agent Network                                │
+│                         Agent Network                                    │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌─────────────────────┐          ┌─────────────────────┐               │
 │  │   INGESTION AGENT   │          │    PROFILE AGENT    │               │
 │  ├─────────────────────┤          ├─────────────────────┤               │
 │  │ Role: Content Parser│          │ Role: User Modeler  │               │
-│  │                     │   A2A    │                     │               │
+│  │                     │   ADK    │                     │               │
 │  │ Tools:              │◄────────►│ Tools:              │               │
 │  │ • parse_pdf()       │          │ • analyze_history() │               │
 │  │ • parse_audio()     │          │ • build_style_dna() │               │
@@ -143,7 +142,7 @@ Google's Agent-to-Agent (A2A) protocol provides:
 │  ┌─────────────────────┐          ┌─────────────────────┐               │
 │  │  SYNTHESIS AGENT    │          │   PLANNER AGENT     │               │
 │  ├─────────────────────┤          ├─────────────────────┤               │
-│  │ Role: Content Gen   │   A2A    │ Role: Scheduler     │               │
+│  │ Role: Content Gen   │   ADK    │ Role: Scheduler     │               │
 │  │                     │◄────────►│                     │               │
 │  │ Tools:              │          │ Tools:              │               │
 │  │ • generate_note()   │          │ • cluster_topics()  │               │
@@ -175,75 +174,38 @@ Google's Agent-to-Agent (A2A) protocol provides:
 |-------|------|---------------|-----------|
 | **Ingestion** | Parse files, extract topics, generate embeddings | `thinking_level: low` (fast) | `parse_pdf`, `extract_topics`, `generate_embed` |
 | **Profile** | Build user's Style DNA, read GCal, ask clarifying questions | `thinking_level: medium` | `build_style_dna`, `get_gcal_context`, `ask_clarifying_q` |
-| **Synthesis** | Generate personalized artifacts with Gemini 3 | `thinking_level: high` (deep reasoning) | `generate_note`, `apply_style`, `create_5min_ver` |
+| **Synthesis** | Generate personalized artifacts with Gemini 2.5 | `thinking_level: high` (deep reasoning) | `generate_note`, `apply_style`, `create_5min_ver` |
 | **Planner** | Multi-signal priority, clustering, effort estimation | `thinking_level: medium` | `prioritize`, `cluster_topics`, `calc_effort` |
 | **Orchestrator** | Coordinate background generation | `thinking_level: medium` | `detect_material_changes`, `schedule_generation` |
 
-### 4.4 A2A Agent Card Specification
+### 4.4 ADK Runtime Call Flow
 
-Each agent exposes an Agent Card at `/.well-known/agent.json`:
+ADK `api_server` uses sessions and a `/run_sse` endpoint.
 
-```json
-{
-  "name": "synthesis-agent",
-  "description": "Generates personalized learning artifacts from raw content",
-  "url": "http://synthesis-agent:8003",
-  "version": "1.0.0",
-  "capabilities": {
-    "streaming": true,
-    "pushNotifications": false
-  },
-  "defaultInputModes": ["text"],
-  "defaultOutputModes": ["text"],
-  "skills": [
-    {
-      "id": "generate-note",
-      "name": "Generate Study Note",
-      "description": "Creates styled markdown from source materials",
-      "inputModes": ["text"],
-      "outputModes": ["text"]
-    },
-    {
-      "id": "generate-5min",
-      "name": "Generate 5-Minute Summary",
-      "description": "Creates a quick-digest version for time-constrained users"
-    }
-  ]
-}
+**Create session**:
+```
+POST /apps/{appName}/users/{userId}/sessions
 ```
 
-### 4.5 A2A Task Protocol
-
-**Request** (JSON-RPC 2.0):
+**Run (SSE)** (request):
 ```json
 {
-  "jsonrpc": "2.0",
-  "method": "tasks/send",
-  "params": {
-    "id": "task-uuid-here",
-    "message": {
-      "role": "user",
-      "parts": [{"text": "{\"skill\": \"generate-5min\", \"content_id\": \"xxx\"}"}]
-    }
+  "app_name": "synthesis",
+  "user_id": "user-123",
+  "session_id": "task-uuid-here",
+  "new_message": {
+    "role": "user",
+    "parts": [{"text": "{\"skill\": \"generate-5min\", \"content_id\": \"xxx\"}"}]
   }
 }
 ```
 
-**Response**:
+**Run (SSE)** (response):
 ```json
-{
-  "jsonrpc": "2.0",
-  "result": {
-    "id": "task-uuid-here",
-    "status": "completed",
-    "artifacts": [
-      {
-        "name": "study-note",
-        "parts": [{"text": "# Generated Note\n\n..."}]
-      }
-    ]
-  }
-}
+[
+  {"event": "thinking", "content": "..."},
+  {"event": "final", "content": "Generated output here"}
+]
 ```
 
 ---
@@ -310,13 +272,11 @@ interface UserProfile {
 }
 ```
 
-### 5.3 Agent A2A Endpoints (Internal)
+### 5.3 Agent Runtime Endpoints (Internal)
 
-Each agent exposes:
-- `GET /.well-known/agent.json` - Agent Card for discovery
-- `POST /a2a/tasks/send` - Receive and execute task
-- `GET /a2a/tasks/{id}` - Check task status
-- `GET /a2a/tasks/{id}/cancel` - Cancel running task
+Each agent (ADK `api_server`) exposes:
+- `POST /apps/{appName}/users/{userId}/sessions` - Create session (returns session id)
+- `POST /run_sse` - Execute with `app_name`, `user_id`, `session_id`, `new_message`
 
 ---
 
@@ -336,19 +296,19 @@ Each agent exposes:
    │          │ POST /upload            │            │            │
    │          │───────────►│            │            │            │
    │          │            │            │            │            │
-   │          │            │ A2A: tasks/send         │            │
+   │          │            │ ADK: /run_sse           │            │
    │          │            │───────────►│            │            │
    │          │            │            │            │            │
    │          │            │            │ Parse & Extract          │
    │          │            │            │ Topics + Embeddings      │
    │          │            │            │────────────────────────► │
    │          │            │            │            │            │
-   │          │            │            │ A2A: Get User Profile    │
+   │          │            │            │ ADK: Get User Profile    │
    │          │            │            │───────────►│            │
    │          │            │            │◄───────────│            │
    │          │            │            │ {goals, style_dna}      │
    │          │            │            │            │            │
-   │          │            │            │ A2A: Calculate Priority  │
+   │          │            │            │ ADK: Calculate Priority  │
    │          │            │            │────────────────────────►│
    │          │            │            │            │ Multi-Signal│
    │          │            │            │            │ Ranking     │
@@ -373,7 +333,7 @@ Each agent exposes:
    │          │ POST /generate          │            │             │
    │          │───────────►│            │            │             │
    │          │            │            │            │             │
-   │          │            │ A2A: Get calendar context             │
+   │          │            │ ADK: Get calendar context             │
    │          │            │───────────►│            │             │
    │          │            │            │ Read GCal  │             │
    │          │            │            │ Find slot  │             │
@@ -381,14 +341,14 @@ Each agent exposes:
    │          │            │ {next_slot: 25min,      │             │
    │          │            │  context: "commute"}    │             │
    │          │            │            │            │             │
-   │          │            │ A2A: Calculate effort   │             │
+   │          │            │ ADK: Calculate effort   │             │
    │          │            │────────────────────────►│             │
    │          │            │◄────────────────────────│             │
    │          │            │ {fits_slot: true}       │             │
    │          │            │            │            │             │
-   │          │            │ A2A: Generate with style│             │
+   │          │            │ ADK: Generate with style│             │
    │          │            │─────────────────────────────────────►│
-   │          │            │            │            │  Gemini 3   │
+   │          │            │            │            │  Gemini 2.5 │
    │          │            │            │            │  + Style DNA│
    │          │            │◄─────────────────────────────────────│
    │          │◄───────────│            │            │             │
@@ -507,19 +467,23 @@ Each agent exposes:
 
 ---
 
-## 8. Gemini 3 Integration
+## 8. Gemini 2.5 Integration
 
 ### 8.1 Model Configuration by Agent
 
 | Agent | Model | Thinking Level | Special Features |
 |-------|-------|----------------|------------------|
-| Ingestion | `gemini-3-pro` | `low` | Vision (PDF/image parsing) |
-| Profile | `gemini-3-pro` | `medium` | Conversation (clarifying Qs) |
-| Synthesis | `gemini-3-pro` | `high` | Structured output, system instructions |
-| Planner | `gemini-3-pro` | `medium` | Function calling |
-| Orchestrator | `gemini-3-pro` | `medium` | Function calling |
+| Ingestion | `gemini-2.5-flash` | `low` | Vision (PDF/image parsing) |
+| Profile | `gemini-2.5-flash` | `medium` | Conversation (clarifying Qs) |
+| Synthesis | `gemini-2.5-flash` | `high` | Structured output, system instructions |
+| Planner | `gemini-2.5-flash` | `medium` | Function calling |
+| Orchestrator | `gemini-2.5-flash` | `medium` | Function calling |
+
+**TODO**: Move to Gemini 3 family when generally available and stable.
 
 ### 8.2 Synthesis Agent Prompting
+
+**TODO**: Move to Gemini 3 family when generally available and stable.
 
 The Synthesis Agent receives the user's Style DNA as a system instruction:
 
@@ -627,7 +591,7 @@ Service Worker caches:
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Agent protocol | A2A | Google standard, async task support |
+| Agent runtime | ADK | Session + /run_sse flow (current SoT) |
 | Content storage | Shared raw, personal output | Efficient storage, enables insights |
 | Time variants | Calendar-aware + 5min always | Covers scheduled and impromptu |
 | Auth | OAuth for GCal only | Simpler for hackathon |
