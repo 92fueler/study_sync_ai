@@ -79,6 +79,12 @@ if [ -z "$CONTENT_ID" ]; then
 fi
 log "content_id: $CONTENT_ID"
 
+log "--- Content List (v1 ranker) ---"
+curl -sS "$GATEWAY_URL/api/v1/content?user_id=$USER_ID&sort=rank&ranker=v1" | $PYTHON_CMD -m json.tool
+
+log "--- Content Detail ---"
+curl -sS "$GATEWAY_URL/api/v1/content/$CONTENT_ID?user_id=$USER_ID" | $PYTHON_CMD -m json.tool
+
 log "--- Priority Queue (can take up to 90s) ---"
 curl --max-time 90 -sS "$GATEWAY_URL/api/v1/queue?user_id=$USER_ID" | $PYTHON_CMD -m json.tool
 
@@ -117,5 +123,12 @@ done
 
 log "--- Notifications ---"
 curl -sS "$GATEWAY_URL/api/v1/notifications?user_id=$USER_ID" | $PYTHON_CMD -m json.tool
+
+log "--- Chat SSE (first event) ---"
+set +e
+curl -N --max-time 10 -sS "$GATEWAY_URL/api/v1/chat" \
+  -H "Content-Type: application/json" \
+  -d "{\"user_id\": \"$USER_ID\", \"message\": \"Ping\"}" | head -n 5
+set -e
 
 log "=== E2E Smoke Test Complete ==="

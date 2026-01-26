@@ -20,6 +20,11 @@ async def lifespan(app: FastAPI):
     print(f"Starting StudySync AI Gateway on port {settings.port}")
     yield
     # Shutdown
+    try:
+        from app.db import close_pool
+        await close_pool()
+    except Exception as e:
+        print(f"Warning: failed to close DB pool: {e}")
     print("Shutting down StudySync AI Gateway")
 
 

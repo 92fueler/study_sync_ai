@@ -218,6 +218,9 @@ POST /apps/{appName}/users/{userId}/sessions
 |--------|------|-------------|
 | `POST` | `/api/v1/upload` | Upload files, trigger ingestion |
 | `POST` | `/api/v1/generate` | Generate artifact for user |
+| `POST` | `/api/v1/chat` | Stream chat response (SSE) |
+| `GET` | `/api/v1/content` | List user content (v1 ranker) |
+| `GET` | `/api/v1/content/{content_id}` | Get specific content item |
 | `GET` | `/api/v1/artifacts/{id}` | Get specific artifact |
 | `GET` | `/api/v1/queue` | Get prioritized content queue |
 | `POST` | `/api/v1/profile` | Create/update user profile |

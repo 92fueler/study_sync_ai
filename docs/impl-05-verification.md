@@ -158,7 +158,7 @@ docker-compose exec supabase psql -U postgres -d studysync \
 ```bash
 # Check material status changes
 # Poll until status = 'PROCESSED'
-curl http://localhost:8000/api/v1/materials?user_id=test-user | jq '.[0].status'
+curl http://localhost:8000/api/v1/content?user_id=test-user | jq '.items[0].status'
 # Expected: "PROCESSED" (may take a few seconds)
 
 # Verify embedding was generated
@@ -210,6 +210,27 @@ docker-compose exec supabase psql -U postgres -d studysync \
 # Get prioritized queue (can take 20-60s due to LLM calls)
 curl --max-time 90 http://localhost:8000/api/v1/queue?user_id=test-user
 # Expected: Response payload from Planner agent (wrapper includes "response")
+```
+
+### 5.4 Content List (v1 Ranker)
+
+```bash
+# List user content with v1 ranker
+curl "http://localhost:8000/api/v1/content?user_id=test-user&sort=rank&ranker=v1" | jq '.items[0]'
+# Expected: item includes content_id, status, uploaded_at, rank_score
+```
+
+### 5.5 Chat (SSE)
+
+```bash
+# Stream a chat response (SSE)
+curl -N http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "test-user",
+    "message": "Summarize my recent uploads in 3 bullets."
+  }'
+# Expected: SSE stream of data: events
 ```
 
 ---
