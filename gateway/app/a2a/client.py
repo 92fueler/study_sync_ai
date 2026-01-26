@@ -90,8 +90,9 @@ class A2AClient:
         client = await self._get_client()
         try:
             # ADK session creation endpoint: POST /apps/{app_name}/users/{user_id}/sessions/{session_id}
+            url = f"{agent.url}/apps/{app_name}/users/{user_id}/sessions/{session_id}"
             response = await client.post(
-                f"{agent.url}/apps/{app_name}/users/{user_id}/sessions/{session_id}",
+                url,
                 json=initial_state or {},
                 headers={"Content-Type": "application/json"}
             )
@@ -102,9 +103,14 @@ class A2AClient:
                 # Session already exists - this is OK, we can proceed
                 return A2AResponse.success({"id": session_id, "exists": True}, session_id)
             else:
-                return A2AResponse.error_response(-32004, f"Failed to create session: {response.text}")
+                return A2AResponse.error_response(-32004, f"Failed to create session: {response.status_code} {response.text}")
+        except httpx.ConnectError as e:
+            return A2AResponse.error_response(-32005, f"Session creation failed: Cannot connect to {agent.url}. Is the agent running? Error: {str(e)}")
+        except httpx.TimeoutException as e:
+            return A2AResponse.error_response(-32005, f"Session creation failed: Timeout connecting to {agent.url}. Error: {str(e)}")
         except Exception as e:
-            return A2AResponse.error_response(-32005, f"Session creation failed: {str(e)}")
+            error_msg = str(e) if str(e) else repr(e)
+            return A2AResponse.error_response(-32005, f"Session creation failed: {error_msg} (URL: {agent.url})")
     
     async def send_task(
         self,

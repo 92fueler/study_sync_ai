@@ -15,7 +15,7 @@ CREATE TABLE content_items (
   title TEXT,
   raw_text TEXT,
   media_type TEXT CHECK (media_type IN ('PDF', 'TXT', 'MARKDOWN', 'AUDIO', 'VIDEO', 'URL')),
-  embedding vector(768),
+  embedding vector(3072),
   topics JSONB,
   word_count INT,
   created_at TIMESTAMPTZ DEFAULT NOW()

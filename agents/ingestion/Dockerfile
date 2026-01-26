@@ -9,4 +9,7 @@ COPY agents/ingestion/ ./ingestion/
 
 EXPOSE 8001
 
-CMD ["adk", "api_server", "--port", "8001", "ingestion"]
+# Set PYTHONPATH so Python can find the ingestion module
+ENV PYTHONPATH=/app
+
+CMD ["adk", "api_server", "--host", "0.0.0.0", "--port", "8001", "."]
