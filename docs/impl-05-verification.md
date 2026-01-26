@@ -420,3 +420,145 @@ This allows testing:
 - Priority ranking (which aligns with goals)
 - Clustering (React + TypeScript might cluster)
 - Different file types
+
+---
+
+## 11. Automated Test Suite
+
+### 11.1 Prerequisites
+
+```bash
+# Install test dependencies
+pip install -r tests/requirements.txt
+
+# For integration tests, set GEMINI_API_KEY
+export GEMINI_API_KEY=your-api-key
+# Or create .env file in project root:
+echo "GEMINI_API_KEY=your-api-key" > .env
+```
+
+### 11.2 Running Unit Tests
+
+Unit tests mock all external dependencies (Gemini API, database) and run without network access.
+
+```bash
+# Run all unit tests (53 tests)
+pytest tests/ --ignore=tests/test_integration.py -v
+
+# Run specific agent tests
+pytest tests/test_ingestion_agent.py -v
+pytest tests/test_synthesis_agent.py -v
+pytest tests/test_planner_agent.py -v
+pytest tests/test_profile_agent.py -v
+pytest tests/test_orchestrator_agent.py -v
+
+# Run with coverage
+pytest tests/ --ignore=tests/test_integration.py --cov=agents --cov-report=term-missing
+```
+
+### 11.3 Running Integration Tests
+
+Integration tests call the real Gemini API. Requires `GEMINI_API_KEY` environment variable.
+
+```bash
+# Run all integration tests (7 tests)
+GEMINI_API_KEY=your-key pytest tests/test_integration.py -v
+
+# Tests included:
+# - test_extract_topics_real_api: Topic extraction with Gemini
+# - test_generate_embedding_real_api: Embedding generation (3072 dimensions)
+# - test_build_system_instruction: Style DNA → system prompt
+# - test_calc_trending: Recency scoring algorithm
+# - test_calc_prerequisite: Foundational content detection
+# - test_generate_reasoning: Priority reasoning generation
+# - test_content_processing_flow: End-to-end upload → topics → embedding
+```
+
+### 11.4 Test Configuration
+
+`pytest.ini` settings:
+```ini
+[pytest]
+testpaths = tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+asyncio_mode = auto
+```
+
+---
+
+## 12. Technical Notes
+
+### 12.1 Gemini SDK
+
+The project uses the modern `google-genai` SDK (not the deprecated `google-generativeai`).
+
+```python
+# Correct import
+from google import genai
+
+# Initialize client
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+# Generate content
+response = client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents=prompt
+)
+
+# Generate embeddings
+result = client.models.embed_content(
+    model="gemini-embedding-001",
+    contents=text
+)
+```
+
+### 12.2 Available Models
+
+As of January 2025, use these models:
+- **Text generation**: `gemini-2.5-flash` (recommended for speed/cost)
+- **Embeddings**: `gemini-embedding-001` (3072 dimensions)
+
+Note: `gemini-1.5-flash` is NOT available via the `google-genai` SDK v1beta API. Use `gemini-2.5-flash` instead.
+
+### 12.3 Lazy Client Pattern
+
+Tools use lazy initialization to allow unit tests to mock the client:
+
+```python
+_client = None
+
+def _get_genai_client():
+    """Get or create the Gemini client lazily."""
+    global _client
+    if _client is None:
+        api_key = os.getenv("GEMINI_API_KEY", "")
+        if api_key:
+            _client = genai.Client(api_key=api_key)
+    return _client
+```
+
+### 12.4 Async-to-Sync Bridge
+
+ADK tools are synchronous but need to call async database/API code:
+
+```python
+def _run_async(coro):
+    """Run async coroutine safely, handling existing event loops."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(asyncio.run, coro).result()
+    else:
+        return asyncio.run(coro)
+```
+
+### 12.5 Python Version
+
+The project targets **Python 3.13** in Docker containers. For local development, Python 3.9+ works but shows deprecation warnings from google-auth.

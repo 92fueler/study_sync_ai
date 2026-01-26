@@ -86,6 +86,9 @@ The `impl-*.md` files contain technical details for building the system:
 | Decision | Choice |
 |----------|--------|
 | Agent communication | A2A Protocol (Google standard) |
+| Gemini SDK | `google-genai` (modern SDK, not deprecated `google-generativeai`) |
+| Text generation model | `gemini-2.5-flash` |
+| Embedding model | `gemini-embedding-001` (3072 dimensions) |
 | Content storage | Shared raw, personalized output |
 | Background generation | Proactive for NEW, conservative for RE-GEN |
 | Time variants | Calendar-aware + 5-min always available |
@@ -108,6 +111,18 @@ The `impl-*.md` files contain technical details for building the system:
 2. Set up environment per **[impl-02-docker-infrastructure.md](./impl-02-docker-infrastructure.md)**
 3. Check your assigned work in **[impl-04-work-division.md](./impl-04-work-division.md)**
 4. Use **[impl-05-verification.md](./impl-05-verification.md)** to test your work
+
+### Running Tests
+
+```bash
+# Unit tests (no API key required)
+pytest tests/ --ignore=tests/test_integration.py -v
+
+# Integration tests (requires GEMINI_API_KEY)
+GEMINI_API_KEY=your-key pytest tests/test_integration.py -v
+```
+
+See **[impl-05-verification.md](./impl-05-verification.md)** sections 11-12 for full test guide.
 
 ---
 
