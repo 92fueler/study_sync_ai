@@ -80,11 +80,18 @@ async def upload_files(
             session_id=task_id
         )
         
-        if response.error:
+        # Check for error
+        error_dict = response.error
+        if error_dict is not None:
+            error_msg = "Unknown error"
+            if isinstance(error_dict, dict):
+                error_msg = error_dict.get("message", "Unknown error")
+            else:
+                error_msg = str(error_dict)
             results.append({
                 "filename": file.filename,
                 "status": "error",
-                "error": response.error.get("message", "Unknown error")
+                "error": error_msg
             })
         else:
             # Extract content_id from response for proactive generation

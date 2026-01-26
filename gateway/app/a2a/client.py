@@ -23,7 +23,8 @@ class A2AResponse:
         return cls(result=result, id=request_id)
     
     @classmethod
-    def error(cls, code: int, message: str, request_id: Optional[str] = None) -> "A2AResponse":
+    def error_response(cls, code: int, message: str, request_id: Optional[str] = None) -> "A2AResponse":
+        """Create an error response (renamed from 'error' to avoid conflict)."""
         return cls(error={"code": code, "message": message}, id=request_id)
 
 
@@ -71,6 +72,40 @@ class A2AClient:
             print(f"Failed to discover agent at {url}: {e}")
             return None
     
+    async def create_session(
+        self,
+        agent_name: str,
+        user_id: str,
+        session_id: str,
+        initial_state: Optional[Dict[str, Any]] = None
+    ) -> A2AResponse:
+        """Create an ADK session before calling /run."""
+        if agent_name not in self._agents:
+            return A2AResponse.error_response(-32001, f"Unknown agent: {agent_name}")
+        
+        agent = self._agents[agent_name]
+        # ADK app name matches the directory name
+        app_name = agent_name 
+        
+        client = await self._get_client()
+        try:
+            # ADK session creation endpoint: POST /apps/{app_name}/users/{user_id}/sessions/{session_id}
+            response = await client.post(
+                f"{agent.url}/apps/{app_name}/users/{user_id}/sessions/{session_id}",
+                json=initial_state or {},
+                headers={"Content-Type": "application/json"}
+            )
+            
+            if response.status_code == 200:
+                return A2AResponse.success(response.json(), session_id)
+            elif response.status_code == 409:
+                # Session already exists - this is OK, we can proceed
+                return A2AResponse.success({"id": session_id, "exists": True}, session_id)
+            else:
+                return A2AResponse.error_response(-32004, f"Failed to create session: {response.text}")
+        except Exception as e:
+            return A2AResponse.error_response(-32005, f"Session creation failed: {str(e)}")
+    
     async def send_task(
         self,
         agent_name: str,
@@ -80,18 +115,30 @@ class A2AClient:
     ) -> A2AResponse:
         """Send a task to an ADK agent."""
         if agent_name not in self._agents:
-            return A2AResponse.error(-32001, f"Unknown agent: {agent_name}")
+            return A2AResponse.error_response(-32001, f"Unknown agent: {agent_name}")
         
         agent = self._agents[agent_name]
         task_id = task_id or str(uuid.uuid4())
+        user_id = payload.get("user_id", "default")
         
-        # ADK agents expect a specific request format
-        # Using the /run endpoint for synchronous execution
+        # Create session first (idempotent - will succeed if already exists)
+        session_result = await self.create_session(agent_name, user_id, task_id)
+        if session_result.error is not None:
+            # If session already exists (409), that's OK - proceed
+            error_msg = ""
+            if isinstance(session_result.error, dict):
+                error_msg = session_result.error.get("message", "")
+            else:
+                error_msg = str(session_result.error)
+            if "already exists" not in error_msg.lower():
+                return session_result
+        
+        # ADK agents expect camelCase field names
         request_body = {
-            "app_name": f"{agent_name}_agent",
-            "user_id": payload.get("user_id", "default"),
-            "session_id": task_id,
-            "new_message": {
+            "appName": agent_name,  # camelCase - use agent_name directly (e.g., 'ingestion')
+            "userId": user_id,  # camelCase
+            "sessionId": task_id,  # camelCase
+            "newMessage": {  # camelCase
                 "role": "user",
                 "parts": [{"text": json.dumps({"skill": skill, **payload})}]
             }
@@ -122,12 +169,12 @@ class A2AClient:
                 else:
                     return A2AResponse.success(data, task_id)
             else:
-                return A2AResponse.error(
+                return A2AResponse.error_response(
                     -32002,
                     f"Agent returned status {response.status_code}: {response.text}"
                 )
         except Exception as e:
-            return A2AResponse.error(-32003, f"Request failed: {str(e)}")
+            return A2AResponse.error_response(-32003, f"Request failed: {str(e)}")
     
     async def run_agent(
         self,
@@ -138,16 +185,29 @@ class A2AClient:
     ) -> A2AResponse:
         """Run an ADK agent with a natural language message."""
         if agent_name not in self._agents:
-            return A2AResponse.error(-32001, f"Unknown agent: {agent_name}")
+            return A2AResponse.error_response(-32001, f"Unknown agent: {agent_name}")
         
         agent = self._agents[agent_name]
         session_id = session_id or str(uuid.uuid4())
         
+        # Create session first (idempotent - will succeed if already exists)
+        session_result = await self.create_session(agent_name, user_id, session_id)
+        if session_result.error is not None:
+            # If session already exists (409), that's OK - proceed
+            error_msg = ""
+            if isinstance(session_result.error, dict):
+                error_msg = session_result.error.get("message", "")
+            else:
+                error_msg = str(session_result.error)
+            if "already exists" not in error_msg.lower():
+                return session_result
+        
+        # ADK agents expect camelCase field names
         request_body = {
-            "app_name": f"{agent_name}_agent",
-            "user_id": user_id,
-            "session_id": session_id,
-            "new_message": {
+            "appName": agent_name,  # camelCase - use agent_name directly (e.g., 'ingestion')
+            "userId": user_id,  # camelCase
+            "sessionId": session_id,  # camelCase
+            "newMessage": {  # camelCase
                 "role": "user",
                 "parts": [{"text": message}]
             }
@@ -164,9 +224,9 @@ class A2AClient:
             if response.status_code == 200:
                 return A2AResponse.success(response.json(), session_id)
             else:
-                return A2AResponse.error(-32002, f"Agent error: {response.text}")
+                return A2AResponse.error_response(-32002, f"Agent error: {response.text}")
         except Exception as e:
-            return A2AResponse.error(-32003, f"Request failed: {str(e)}")
+            return A2AResponse.error_response(-32003, f"Request failed: {str(e)}")
     
     async def get_task_status(
         self,

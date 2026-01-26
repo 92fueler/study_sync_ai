@@ -6,6 +6,9 @@ set -e
 
 cd "$(dirname "$0")/../.."
 
+# Detect Python command
+PYTHON_CMD=$(command -v python3 || command -v python || echo "python3")
+
 GATEWAY_URL="${GATEWAY_URL:-http://localhost:8000}"
 FILE_PATH="${1:-}"
 
@@ -35,7 +38,7 @@ echo ""
 echo "=== Uploading: $FILE_PATH ==="
 curl -s -X POST "$GATEWAY_URL/api/v1/upload" \
   -F "user_id=test-user-123" \
-  -F "files=@$FILE_PATH" | python -m json.tool || echo "Upload failed"
+  -F "files=@$FILE_PATH" | $PYTHON_CMD -m json.tool || echo "Upload failed"
 
 echo ""
 echo "=== Upload Test Complete ==="
