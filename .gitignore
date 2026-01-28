@@ -29,3 +29,6 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+
+# Project specific
+notepads/
