@@ -27,8 +27,10 @@ App runs at: **http://localhost:3001**
 ```
 frontend/
 ├── src/
+│   ├── api/           # API integration (Legacy/Shared)
 │   ├── components/    # Reusable UI components
 │   ├── pages/         # Main page views
+│   ├── utils/         # shared utilities
 │   ├── assets/        # Static assets
 │   ├── App.tsx        # Routing configuration
 │   └── main.tsx       # App entry point
