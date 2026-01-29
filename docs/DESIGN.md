@@ -228,6 +228,10 @@ POST /apps/{appName}/users/{userId}/sessions
 | `POST` | `/api/v1/feedback` | Submit artifact feedback |
 | `GET` | `/api/v1/notifications` | Get user notifications |
 | `GET` | `/api/v1/notifications/badge` | Get unread count |
+| `POST` | `/api/v1/notifications/{notification_id}/read` | Mark notification as read |
+
+Notes:
+- `GET /api/v1/notifications` supports `unread_only` (boolean) query param.
 
 ### 5.2 Request/Response Schemas
 
