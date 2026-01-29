@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Check } from 'lucide-react';
+import { Check, Headphones, Video, FileText, Image as ImageIcon, HelpCircle, Lightbulb, Share2, Mic, MonitorPlay } from 'lucide-react';
 
 export default function Onboarding() {
-    const [selectedFormats, setSelectedFormats] = useState(['podcast', 'diagrams']);
+    const [selectedFormats, setSelectedFormats] = useState<string[]>(['audio', 'notes']);
+    const [selectedPreferences, setSelectedPreferences] = useState<string[]>(['quizzes', 'analogies']);
+    const [customStyle, setCustomStyle] = useState('');
     const [cognitiveTone, setCognitiveTone] = useState('socratic');
 
     const toggleFormat = (format: string) => {
@@ -10,6 +12,14 @@ export default function Onboarding() {
             prev.includes(format)
                 ? prev.filter(f => f !== format)
                 : [...prev, format]
+        );
+    };
+
+    const togglePreference = (pref: string) => {
+        setSelectedPreferences(prev =>
+            prev.includes(pref)
+                ? prev.filter(p => p !== pref)
+                : [...prev, pref]
         );
     };
 
@@ -27,66 +37,89 @@ export default function Onboarding() {
                         Learning DNA
                     </h1>
                     <p className="text-gray-600 mb-8">
-                        Configure your personalized AI learning experience to match your unique cognitive style. We'll adapt content formats and tones specifically for you.
+                        Configure your personalized AI learning experience. Decouple format from style to create your perfect study mix.
                     </p>
 
-                    <div className="mb-8">
+                    {/* Preferred Content Formats */}
+                    <div className="mb-10">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-xl font-semibold text-gray-900">Format Preferences</h2>
-                            <span className="text-sm text-gray-500">Select all that apply</span>
+                            <h2 className="text-xl font-semibold text-gray-900">Preferred Content Formats</h2>
+                            <span className="text-sm text-gray-500">Select supported media types</span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <button
-                                onClick={() => toggleFormat('podcast')}
-                                className={`relative p-6 rounded-lg border-2 transition-all text-left ${selectedFormats.includes('podcast')
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {[
+                                { id: 'audio', label: 'Audio', icon: Headphones, desc: 'Listening' },
+                                { id: 'video', label: 'Video', icon: Video, desc: 'Watching' },
+                                { id: 'notes', label: 'Notes', icon: FileText, desc: 'Reading' },
+                                { id: 'image', label: 'Image', icon: ImageIcon, desc: 'Visuals' },
+                            ].map((item) => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => toggleFormat(item.id)}
+                                    className={`relative p-4 rounded-xl border-2 transition-all text-center flex flex-col items-center gap-2 ${selectedFormats.includes(item.id)
                                         ? 'border-trust-blue bg-blue-50'
                                         : 'border-gray-200 bg-white hover:border-gray-300'
-                                    }`}
-                            >
-                                {selectedFormats.includes('podcast') && (
-                                    <div className="absolute top-3 right-3 w-6 h-6 bg-trust-blue rounded-full flex items-center justify-center">
-                                        <Check className="w-4 h-4 text-white" />
+                                        }`}
+                                >
+                                    {selectedFormats.includes(item.id) && (
+                                        <div className="absolute top-2 right-2 w-5 h-5 bg-trust-blue rounded-full flex items-center justify-center">
+                                            <Check className="w-3 h-3 text-white" />
+                                        </div>
+                                    )}
+                                    <div className={`p-3 rounded-full ${selectedFormats.includes(item.id) ? 'bg-blue-100 text-trust-blue' : 'bg-gray-100 text-gray-500'}`}>
+                                        <item.icon className="w-6 h-6" />
                                     </div>
-                                )}
-                                <div className="text-3xl mb-3">🎧</div>
-                                <h3 className="font-semibold text-gray-900 mb-1">Podcast Scripts</h3>
-                                <p className="text-sm text-gray-600">Audio-first summaries tailored for listening on the go.</p>
-                            </button>
+                                    <div>
+                                        <h3 className="font-semibold text-gray-900 text-sm">{item.label}</h3>
+                                        <p className="text-xs text-gray-500">{item.desc}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-                            <button
-                                onClick={() => toggleFormat('quizzes')}
-                                className={`relative p-6 rounded-lg border-2 transition-all text-left ${selectedFormats.includes('quizzes')
-                                        ? 'border-trust-blue bg-blue-50'
-                                        : 'border-gray-200 bg-white hover:border-gray-300'
-                                    }`}
-                            >
-                                {selectedFormats.includes('quizzes') && (
-                                    <div className="absolute top-3 right-3 w-6 h-6 bg-trust-blue rounded-full flex items-center justify-center">
-                                        <Check className="w-4 h-4 text-white" />
-                                    </div>
-                                )}
-                                <div className="text-3xl mb-3">📋</div>
-                                <h3 className="font-semibold text-gray-900 mb-1">Socratic Quizzes</h3>
-                                <p className="text-sm text-gray-600">Interactive Q&A sessions to test comprehension actively.</p>
-                            </button>
+                    {/* Learning Style Preferences */}
+                    <div className="mb-10">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-semibold text-gray-900">Learning Style Preferences</h2>
+                            <span className="text-sm text-gray-500">How do you learn best?</span>
+                        </div>
 
-                            <button
-                                onClick={() => toggleFormat('diagrams')}
-                                className={`relative p-6 rounded-lg border-2 transition-all text-left ${selectedFormats.includes('diagrams')
-                                        ? 'border-trust-blue bg-blue-50'
-                                        : 'border-gray-200 bg-white hover:border-gray-300'
-                                    }`}
-                            >
-                                {selectedFormats.includes('diagrams') && (
-                                    <div className="absolute top-3 right-3 w-6 h-6 bg-trust-blue rounded-full flex items-center justify-center">
-                                        <Check className="w-4 h-4 text-white" />
-                                    </div>
-                                )}
-                                <div className="text-3xl mb-3">📊</div>
-                                <h3 className="font-semibold text-gray-900 mb-1">Visual Diagrams</h3>
-                                <p className="text-sm text-gray-600">Flowcharts and mind maps for structural learners.</p>
-                            </button>
+                        <div className="flex flex-wrap gap-3 mb-6">
+                            {[
+                                { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
+                                { id: 'analogies', label: 'Analogies', icon: Lightbulb },
+                                { id: 'knowledge_graph', label: 'Knowledge Graph', icon: Share2 },
+                                { id: 'podcast', label: 'Podcast Style', icon: Mic },
+                                { id: 'lecture', label: 'Lecture Style', icon: MonitorPlay }, // Changed from User to MonitorPlay specifically for Lecture
+                            ].map((pref) => (
+                                <button
+                                    key={pref.id}
+                                    onClick={() => togglePreference(pref.id)}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all text-sm font-medium ${selectedPreferences.includes(pref.id)
+                                        ? 'bg-trust-blue text-white border-trust-blue shadow-sm'
+                                        : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    <pref.icon className="w-4 h-4" />
+                                    {pref.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Custom Style Input */}
+                        <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Describe your preferred style (1 sentence)
+                            </label>
+                            <input
+                                type="text"
+                                value={customStyle}
+                                onChange={(e) => setCustomStyle(e.target.value)}
+                                placeholder="e.g., 'I prefer detailed historical context with modern-day comparisons.'"
+                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-trust-blue focus:border-trust-blue outline-none transition-shadow"
+                            />
                         </div>
                     </div>
 
@@ -97,8 +130,8 @@ export default function Onboarding() {
                             <button
                                 onClick={() => setCognitiveTone('academic')}
                                 className={`px-6 py-2 rounded-full font-medium transition-colors ${cognitiveTone === 'academic'
-                                        ? 'bg-trust-blue text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-trust-blue text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Academic
@@ -106,8 +139,8 @@ export default function Onboarding() {
                             <button
                                 onClick={() => setCognitiveTone('socratic')}
                                 className={`px-6 py-2 rounded-full font-medium transition-colors ${cognitiveTone === 'socratic'
-                                        ? 'bg-trust-blue text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-trust-blue text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Socratic
@@ -115,8 +148,8 @@ export default function Onboarding() {
                             <button
                                 onClick={() => setCognitiveTone('eli5')}
                                 className={`px-6 py-2 rounded-full font-medium transition-colors ${cognitiveTone === 'eli5'
-                                        ? 'bg-trust-blue text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-trust-blue text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 ELI5
@@ -124,8 +157,8 @@ export default function Onboarding() {
                             <button
                                 onClick={() => setCognitiveTone('bulleted')}
                                 className={`px-6 py-2 rounded-full font-medium transition-colors ${cognitiveTone === 'bulleted'
-                                        ? 'bg-trust-blue text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    ? 'bg-trust-blue text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                             >
                                 Bulleted
@@ -189,21 +222,20 @@ export default function Onboarding() {
                         </div>
 
                         <h4 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                            Visual & Socratic
+                            {selectedPreferences.slice(0, 2).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' & ') || 'Custom'} Learner
                         </h4>
                         <p className="text-sm text-gray-600 text-center mb-4">
-                            Your profile is optimized for <strong>rapid visual intake</strong> with critical thinking checks.
+                            Your profile is optimized for <strong>{selectedFormats.join(', ')}</strong> content with {cognitiveTone} tone.
                         </p>
 
                         <div className="flex flex-wrap gap-2 justify-center mb-6">
-                            <span className="px-3 py-1 bg-blue-50 text-trust-blue text-xs font-medium rounded-full">
-                                #VisualLearner
-                            </span>
-                            <span className="px-3 py-1 bg-blue-50 text-trust-blue text-xs font-medium rounded-full">
-                                #TimeCompressed
-                            </span>
-                            <span className="px-3 py-1 bg-blue-50 text-trust-blue text-xs font-medium rounded-full">
-                                #SocraticMethod
+                            {selectedFormats.map(f => (
+                                <span key={f} className="px-3 py-1 bg-blue-50 text-trust-blue text-xs font-medium rounded-full">
+                                    #{f.toUpperCase()}
+                                </span>
+                            ))}
+                            <span className="px-3 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-full">
+                                #{cognitiveTone.toUpperCase()}
                             </span>
                         </div>
 
