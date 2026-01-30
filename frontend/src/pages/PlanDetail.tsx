@@ -1,10 +1,14 @@
 import { Link } from 'react-router-dom';
 import {
     ChevronLeft, Clock, BookOpen, Play, CheckCircle,
-    Lock, Calendar, Award, ArrowRight
+    Lock, Calendar, Award, ArrowRight, RefreshCw
 } from 'lucide-react';
 
 export default function PlanDetail() {
+    const handleCheckAvailability = () => {
+        alert("Checking calendar availability... \n\nSynced! You are free tomorrow at 3:00 PM.");
+    };
+
     // Mock Data for a specific plan
     const plan = {
         id: '1',
@@ -151,6 +155,14 @@ export default function PlanDetail() {
                                 <Play className="w-4 h-4 fill-current" />
                                 Resume Learning
                             </Link>
+
+                            <button
+                                onClick={handleCheckAvailability}
+                                className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                <RefreshCw className="w-4 h-4" />
+                                Sync Schedule to Calendar
+                            </button>
                         </div>
                     </div>
                 </div>
