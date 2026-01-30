@@ -228,10 +228,26 @@ POST /apps/{appName}/users/{userId}/sessions
 | `POST` | `/api/v1/feedback` | Submit artifact feedback |
 | `GET` | `/api/v1/notifications` | Get user notifications |
 | `GET` | `/api/v1/notifications/badge` | Get unread count |
-| `POST` | `/api/v1/notifications/{notification_id}/read` | Mark notification as read |
-
-Notes:
-- `GET /api/v1/notifications` supports `unread_only` (boolean) query param.
+| `POST` | `/api/v1/learning-plans` | Create learning plan |
+| `GET` | `/api/v1/learning-plans` | List learning plans |
+| `GET` | `/api/v1/learning-plans/{plan_id}` | Get a learning plan |
+| `PATCH` | `/api/v1/learning-plans/{plan_id}` | Update a learning plan |
+| `POST` | `/api/v1/learning-plans/{plan_id}/approve` | Approve plan (activate) |
+| `POST` | `/api/v1/learning-plans/{plan_id}/items` | Add plan item |
+| `PATCH` | `/api/v1/learning-plans/{plan_id}/items/{item_id}` | Update plan item |
+| `DELETE` | `/api/v1/learning-plans/{plan_id}/items/{item_id}` | Delete plan item |
+| `GET` | `/api/v1/learning-plans/{plan_id}/progress` | Get plan progress |
+| `GET` | `/api/v1/settings/{user_id}` | Get user settings |
+| `PATCH` | `/api/v1/settings/{user_id}` | Update user settings |
+| `GET` | `/api/v1/calendar/accounts` | List calendar accounts |
+| `POST` | `/api/v1/calendar/accounts` | Create/connect calendar account |
+| `POST` | `/api/v1/calendar/accounts/{account_id}/disconnect` | Disconnect calendar account |
+| `GET` | `/api/v1/calendar/calendars` | List calendars |
+| `POST` | `/api/v1/calendar/calendars` | Create calendar |
+| `GET` | `/api/v1/calendar/events` | List calendar events |
+| `POST` | `/api/v1/calendar/events` | Create calendar event |
+| `DELETE` | `/api/v1/calendar/events/{event_id}` | Delete calendar event |
+| `GET` | `/api/v1/calendar/availability` | Get available study slots |
 
 ### 5.2 Request/Response Schemas
 

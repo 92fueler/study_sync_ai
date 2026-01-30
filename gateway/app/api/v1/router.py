@@ -15,6 +15,9 @@ from app.api.v1.feedback import router as feedback_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.content import router as content_router
 from app.api.v1.chat import router as chat_router
+from app.api.v1.learning_plans import router as learning_plans_router
+from app.api.v1.settings import router as settings_router
+from app.api.v1.calendar import router as calendar_router
 
 api_router = APIRouter()
 
@@ -27,3 +30,6 @@ api_router.include_router(feedback_router, prefix="/feedback", tags=["feedback"]
 api_router.include_router(notifications_router, prefix="/notifications", tags=["notifications"])
 api_router.include_router(content_router, prefix="/content", tags=["content"])
 api_router.include_router(chat_router, prefix="/chat", tags=["chat"])
+api_router.include_router(learning_plans_router, prefix="/learning-plans", tags=["learning-plans"])
+api_router.include_router(settings_router, prefix="/settings", tags=["settings"])
+api_router.include_router(calendar_router, prefix="/calendar", tags=["calendar"])
