@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Onboarding from './pages/Onboarding';
@@ -7,21 +8,50 @@ import KnowledgeBank from './pages/KnowledgeBank';
 import NoteDetail from './pages/NoteDetail';
 import StudySession from './pages/StudySession';
 import PlanDetail from './pages/PlanDetail';
+import SignUp from './pages/SignUp';
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = localStorage.getItem('isAuthenticated');
+  const hasOnboarded = localStorage.getItem('hasOnboarded');
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/signup" state={{ from: location }} replace />;
+  }
+
+  if (!hasOnboarded) {
+    return <Navigate to="/dna" state={{ from: location }} replace />;
+  }
+
+  return children;
+}
 
 function App() {
   return (
     <BrowserRouter>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/dna" element={<Onboarding />} />
-          <Route path="/plan" element={<LearningPlan />} />
-          <Route path="/plans/:id" element={<PlanDetail />} />
-          <Route path="/bank" element={<KnowledgeBank />} />
-          <Route path="/notes/:id" element={<NoteDetail />} />
-          <Route path="/session/:sessionId" element={<StudySession />} /> {/* Ensuring this exists too if it was missed, based on StudySession usage */}
-        </Routes>
-      </Layout>
+      <Routes>
+        {/* Auth Pages (No Layout) */}
+        <Route path="/signup" element={<SignUp />} />
+
+        {/* Protected App Pages (With Layout) */}
+        <Route path="/*" element={
+          <Layout>
+            <Routes>
+              <Route path="/" element={
+                <RequireAuth>
+                  <Dashboard />
+                </RequireAuth>
+              } />
+              <Route path="/dna" element={<Onboarding />} />
+              <Route path="/plan" element={<LearningPlan />} />
+              <Route path="/plans/:id" element={<PlanDetail />} />
+              <Route path="/bank" element={<KnowledgeBank />} />
+              <Route path="/notes/:id" element={<NoteDetail />} />
+              <Route path="/session/:sessionId" element={<StudySession />} />
+            </Routes>
+          </Layout>
+        } />
+      </Routes>
     </BrowserRouter>
   );
 }

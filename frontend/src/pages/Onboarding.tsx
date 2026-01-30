@@ -239,8 +239,14 @@ export default function Onboarding() {
                             </span>
                         </div>
 
-                        <button className="w-full px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium mb-2">
-                            💾 Update Learning DNA
+                        <button
+                            onClick={() => {
+                                localStorage.setItem('hasOnboarded', 'true');
+                                window.location.href = '/'; // Simple redirect to force re-render/route check if needed, or use navigate
+                            }}
+                            className="w-full px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium mb-2"
+                        >
+                            💾 Save & Continue
                         </button>
 
                         <p className="text-xs text-gray-500 text-center">Last updated: 2 hours ago</p>
