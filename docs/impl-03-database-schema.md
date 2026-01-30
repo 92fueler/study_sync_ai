@@ -245,10 +245,22 @@ CREATE TABLE learning_plans (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id TEXT NOT NULL,
   title TEXT,
+  description TEXT,
   goal TEXT,
-  status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'active', 'archived')),
+  status TEXT DEFAULT 'proposed' CHECK (status IN ('proposed', 'active', 'paused', 'completed', 'archived')),
+  difficulty TEXT,
+  category TEXT,
+  category_color TEXT,
+  estimated_time TEXT,
+  module_count INT,
+  progress_percent INT DEFAULT 0,
+  total_modules INT,
+  completed_modules INT,
+  next_session_at TIMESTAMPTZ,
+  paused_at TIMESTAMPTZ,
   weeks INT,
   sessions_per_week INT,
+  details JSONB,
   metadata JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -276,7 +288,44 @@ CREATE INDEX idx_learning_plan_items_plan ON learning_plan_items(plan_id);
 CREATE INDEX idx_learning_plan_items_user ON learning_plan_items(user_id);
 
 -- ===========================================
--- 10. USER SETTINGS
+-- 10. LEARNING NOTES
+-- ===========================================
+CREATE TABLE learning_notes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  note_type TEXT NOT NULL CHECK (note_type IN ('pdf', 'video', 'audio', 'image', 'url', 'text')),
+  title TEXT NOT NULL,
+  description TEXT,
+  tags JSONB,
+  author TEXT,
+  topic TEXT,
+  thumbnail_url TEXT,
+  source_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_learning_notes_user ON learning_notes(user_id);
+CREATE INDEX idx_learning_notes_topic ON learning_notes(user_id, topic);
+
+-- ===========================================
+-- 11. INGESTION JOBS
+-- ===========================================
+CREATE TABLE ingestion_jobs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  job_type TEXT NOT NULL CHECK (job_type IN ('pdf', 'video', 'audio', 'image', 'url', 'text')),
+  status TEXT NOT NULL CHECK (status IN ('ingesting', 'style-matching', 'ready', 'failed')),
+  progress INT DEFAULT 0,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_ingestion_jobs_user ON ingestion_jobs(user_id, status);
+
+-- ===========================================
+-- 12. USER SETTINGS
 -- ===========================================
 CREATE TABLE user_settings (
   user_id TEXT PRIMARY KEY,
@@ -293,7 +342,7 @@ CREATE TABLE user_settings (
 );
 
 -- ===========================================
--- 11. CALENDAR INTEGRATIONS (LOCAL-FIRST)
+-- 13. CALENDAR INTEGRATIONS (LOCAL-FIRST)
 -- ===========================================
 CREATE TABLE calendar_accounts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -350,6 +399,8 @@ ALTER TABLE behavior_signals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE learning_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE learning_plan_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE learning_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ingestion_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE calendar_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE calendar_calendars ENABLE ROW LEVEL SECURITY;
@@ -367,6 +418,8 @@ CREATE POLICY "Allow all for demo" ON behavior_signals FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON notifications FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON learning_plans FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON learning_plan_items FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON learning_notes FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON ingestion_jobs FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON user_settings FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON calendar_accounts FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON calendar_calendars FOR ALL USING (true);

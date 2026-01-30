@@ -28,20 +28,44 @@ class PlanItemCreate(BaseModel):
 class PlanCreate(BaseModel):
     user_id: str
     title: Optional[str] = None
+    description: Optional[str] = None
     goal: Optional[str] = None
-    status: Optional[str] = "draft"
+    status: Optional[str] = "proposed"
+    difficulty: Optional[str] = None
+    category: Optional[str] = None
+    category_color: Optional[str] = None
+    estimated_time: Optional[str] = None
+    module_count: Optional[int] = None
+    progress_percent: Optional[int] = None
+    total_modules: Optional[int] = None
+    completed_modules: Optional[int] = None
+    next_session_at: Optional[datetime] = None
+    paused_at: Optional[datetime] = None
     weeks: Optional[int] = None
     sessions_per_week: Optional[int] = None
+    details: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     items: Optional[List[PlanItemCreate]] = None
 
 
 class PlanUpdate(BaseModel):
     title: Optional[str] = None
+    description: Optional[str] = None
     goal: Optional[str] = None
     status: Optional[str] = None
+    difficulty: Optional[str] = None
+    category: Optional[str] = None
+    category_color: Optional[str] = None
+    estimated_time: Optional[str] = None
+    module_count: Optional[int] = None
+    progress_percent: Optional[int] = None
+    total_modules: Optional[int] = None
+    completed_modules: Optional[int] = None
+    next_session_at: Optional[datetime] = None
+    paused_at: Optional[datetime] = None
     weeks: Optional[int] = None
     sessions_per_week: Optional[int] = None
+    details: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -78,8 +102,16 @@ def _item_row_to_dict(row) -> Dict[str, Any]:
 async def create_learning_plan(request: PlanCreate):
     """Create a learning plan (draft by default)."""
     query = """
-        INSERT INTO learning_plans (user_id, title, goal, status, weeks, sessions_per_week, metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO learning_plans (
+            user_id, title, description, goal, status, difficulty, category, category_color,
+            estimated_time, module_count, progress_percent, total_modules, completed_modules,
+            next_session_at, paused_at, weeks, sessions_per_week, details, metadata
+        )
+        VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8,
+            $9, $10, $11, $12, $13,
+            $14, $15, $16, $17, $18, $19
+        )
         RETURNING *
     """
     try:
@@ -87,10 +119,22 @@ async def create_learning_plan(request: PlanCreate):
             query,
             request.user_id,
             request.title,
+            request.description,
             request.goal,
             request.status,
+            request.difficulty,
+            request.category,
+            request.category_color,
+            request.estimated_time,
+            request.module_count,
+            request.progress_percent,
+            request.total_modules,
+            request.completed_modules,
+            request.next_session_at,
+            request.paused_at,
             request.weeks,
             request.sessions_per_week,
+            request.details,
             request.metadata,
         )
     except RuntimeError as exc:
@@ -156,6 +200,30 @@ async def list_learning_plans(
         limit_param = len(params) + 1
         offset_param = len(params) + 2
         rows = await fetch(query.format(limit_param=limit_param, offset_param=offset_param), *params, limit, offset)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database error")
+
+    plans = [_plan_row_to_dict(row) for row in rows]
+    return {"user_id": user_id, "count": len(plans), "items": plans}
+
+
+@router.get("/proposed")
+async def list_proposed_learning_plans(
+    user_id: str = Query(...),
+    limit: int = Query(10, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+):
+    """List proposed learning plans (carousel)."""
+    query = """
+        SELECT * FROM learning_plans
+        WHERE user_id = $1 AND status = 'proposed'
+        ORDER BY created_at DESC
+        LIMIT $2 OFFSET $3
+    """
+    try:
+        rows = await fetch(query, user_id, limit, offset)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception:
@@ -245,7 +313,51 @@ async def approve_learning_plan(plan_id: str, user_id: str = Query(...)):
     """Approve (activate) a learning plan."""
     query = """
         UPDATE learning_plans
-        SET status = 'active', updated_at = NOW()
+        SET status = 'active', paused_at = NULL, updated_at = NOW()
+        WHERE id = $1 AND user_id = $2
+        RETURNING *
+    """
+    try:
+        row = await fetchrow(query, plan_id, user_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database error")
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    return {"plan": _plan_row_to_dict(row)}
+
+
+@router.post("/{plan_id}/pause")
+async def pause_learning_plan(plan_id: str, user_id: str = Query(...)):
+    """Pause an active learning plan."""
+    query = """
+        UPDATE learning_plans
+        SET status = 'paused', paused_at = NOW(), updated_at = NOW()
+        WHERE id = $1 AND user_id = $2
+        RETURNING *
+    """
+    try:
+        row = await fetchrow(query, plan_id, user_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database error")
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    return {"plan": _plan_row_to_dict(row)}
+
+
+@router.post("/{plan_id}/resume")
+async def resume_learning_plan(plan_id: str, user_id: str = Query(...)):
+    """Resume a paused learning plan."""
+    query = """
+        UPDATE learning_plans
+        SET status = 'active', paused_at = NULL, updated_at = NOW()
         WHERE id = $1 AND user_id = $2
         RETURNING *
     """

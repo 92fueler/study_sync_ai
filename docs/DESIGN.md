@@ -228,11 +228,22 @@ POST /apps/{appName}/users/{userId}/sessions
 | `POST` | `/api/v1/feedback` | Submit artifact feedback |
 | `GET` | `/api/v1/notifications` | Get user notifications |
 | `GET` | `/api/v1/notifications/badge` | Get unread count |
+| `GET` | `/api/v1/dashboard` | Dashboard summary (active plans + recent notes) |
+| `GET` | `/api/v1/notes` | List learning notes |
+| `GET` | `/api/v1/notes/recent` | List recent notes |
+| `GET` | `/api/v1/notes/topics` | List note topic clusters |
+| `POST` | `/api/v1/notes` | Create a learning note |
+| `GET` | `/api/v1/ingestion/processing` | List ingestion jobs |
+| `POST` | `/api/v1/ingestion` | Create ingestion job |
+| `PATCH` | `/api/v1/ingestion/{job_id}` | Update ingestion job |
 | `POST` | `/api/v1/learning-plans` | Create learning plan |
 | `GET` | `/api/v1/learning-plans` | List learning plans |
+| `GET` | `/api/v1/learning-plans/proposed` | List proposed plans |
 | `GET` | `/api/v1/learning-plans/{plan_id}` | Get a learning plan |
 | `PATCH` | `/api/v1/learning-plans/{plan_id}` | Update a learning plan |
 | `POST` | `/api/v1/learning-plans/{plan_id}/approve` | Approve plan (activate) |
+| `POST` | `/api/v1/learning-plans/{plan_id}/pause` | Pause plan |
+| `POST` | `/api/v1/learning-plans/{plan_id}/resume` | Resume plan |
 | `POST` | `/api/v1/learning-plans/{plan_id}/items` | Add plan item |
 | `PATCH` | `/api/v1/learning-plans/{plan_id}/items/{item_id}` | Update plan item |
 | `DELETE` | `/api/v1/learning-plans/{plan_id}/items/{item_id}` | Delete plan item |
