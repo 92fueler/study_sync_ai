@@ -1,80 +1,72 @@
-import { ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { GraduationCap, BookOpen, Calendar, Settings, User } from 'lucide-react'
-import { cn } from '../utils/cn'
+import { Link, useLocation } from 'react-router-dom';
+import { Search, Bell, User } from 'lucide-react';
 
-interface LayoutProps {
-  children: ReactNode
-  userId: string
-}
+export default function Layout({ children }: { children: React.ReactNode }) {
+    const location = useLocation();
 
-const navigation = [
-  { name: 'Knowledge Bank', href: '/knowledge-bank', icon: BookOpen },
-  { name: 'Learning Plans', href: '/plans', icon: GraduationCap },
-  { name: 'Calendar', href: '/calendar', icon: Calendar },
-  { name: 'Settings', href: '/settings', icon: Settings },
-]
+    const isActive = (path: string) => location.pathname === path;
 
-export default function Layout({ children, userId }: LayoutProps) {
-  const location = useLocation()
+    return (
+        <div className="min-h-screen bg-gray-50">
+            <nav className="fixed top-0 w-full bg-white border-b border-gray-200 z-50">
+                <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+                    <div className="flex items-center gap-8">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-trust-blue rounded-full flex items-center justify-center">
+                                <span className="text-white font-bold text-sm">S</span>
+                            </div>
+                            <span className="font-semibold text-gray-900">StudySync AI</span>
+                        </div>
+                    </div>
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white border-r border-gray-200 min-h-screen flex flex-col">
-          {/* Logo */}
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <GraduationCap className="w-8 h-8 text-blue-600" />
-              <span className="text-xl font-bold text-gray-900">StudySync AI</span>
-            </div>
-          </div>
+                    <div className="flex items-center gap-8">
+                        <Link
+                            to="/"
+                            className={`text-sm font-medium transition-colors ${isActive('/') ? 'text-trust-blue' : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Dashboard
+                        </Link>
+                        <Link
+                            to="/dna"
+                            className={`text-sm font-medium transition-colors ${isActive('/dna') ? 'text-trust-blue' : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            My DNA
+                        </Link>
+                        <Link
+                            to="/plan"
+                            className={`text-sm font-medium transition-colors ${isActive('/plan') ? 'text-trust-blue' : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Learning Plan
+                        </Link>
+                        <Link
+                            to="/bank"
+                            className={`text-sm font-medium transition-colors ${isActive('/bank') ? 'text-trust-blue' : 'text-gray-600 hover:text-gray-900'
+                                }`}
+                        >
+                            Knowledge Bank
+                        </Link>
+                    </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1">
-            {navigation.map((item) => {
-              const isActive = location.pathname === item.href || 
-                (item.href === '/knowledge-bank' && location.pathname === '/')
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={cn(
-                    'flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-blue-50 text-blue-600'
-                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                  )}
-                >
-                  <item.icon className="w-5 h-5" />
-                  {item.name}
-                </Link>
-              )
-            })}
-          </nav>
+                    <div className="flex items-center gap-4">
+                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                            <Search className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                            <Bell className="w-5 h-5 text-gray-600" />
+                        </button>
+                        <button className="w-8 h-8 bg-orange-400 rounded-full flex items-center justify-center">
+                            <User className="w-5 h-5 text-white" />
+                        </button>
+                    </div>
+                </div>
+            </nav>
 
-          {/* User Profile */}
-          <div className="p-4 border-t border-gray-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                <User className="w-5 h-5 text-blue-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  {userId.replace('user_', 'User ')}
-                </p>
-                <p className="text-xs text-gray-500">Pro Plan</p>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1">
-          {children}
-        </main>
-      </div>
-    </div>
-  )
+            <main className="pt-16">
+                {children}
+            </main>
+        </div>
+    );
 }

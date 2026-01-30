@@ -1,3 +1,47 @@
+# StudySync AI Frontend (React 19 + Vite 7)
+
+## Overview 🚀
+This is the new frontend implementation for StudySync AI, built from the ground up to support the "Cognitive Learning Manager" vision. It features a polished, responsive UI/UX with 4 main pages:
+1. **Dashboard**: Central hub for raw notes and active plans.
+2. **Learning DNA**: Personalization engine with decoupled formats/preferences.
+3. **Learning Plan**: AI-proposed plans with approval workflow and topic icons.
+4. **Knowledge Bank**: Batch ingestion hub with drag-and-drop and live processing.
+
+## Quick Start
+```bash
+cd frontend
+npm install
+npm run dev
+```
+App runs at: **http://localhost:3001**
+
+## Tech Stack
+- **React 19**
+- **Vite 7**
+- **TypeScript**
+- **Tailwind CSS 3.3**
+- **Lucide React** (Icons)
+- **Google Fonts** (Playfair Display + Inter)
+
+## Project Structure
+```
+frontend/
+├── src/
+│   ├── api/           # API integration (Legacy/Shared)
+│   ├── components/    # Reusable UI components
+│   ├── pages/         # Main page views
+│   ├── utils/         # shared utilities
+│   ├── assets/        # Static assets
+│   ├── App.tsx        # Routing configuration
+│   └── main.tsx       # App entry point
+```
+
+---
+
+# Legacy Documentation (Original README)
+
+Below is the original documentation from the previous React 18 implementation. Some information (like API endpoints or StudySession page) may still be relevant for reference.
+
 # StudySync AI Frontend
 
 Modern React + TypeScript frontend for StudySync AI - Cognitive Learning Manager.
@@ -172,3 +216,64 @@ kill -9 <PID>
 
 - [Main README](../README.md) - Project overview and setup
 - [USER_GUIDE.md](../USER_GUIDE.md) - Complete API documentation
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+
+```js
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+
+      // Remove tseslint.configs.recommended and replace with this
+      tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
+
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default defineConfig([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
