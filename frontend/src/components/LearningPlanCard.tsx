@@ -54,7 +54,6 @@ const categoryIcons = {
 export default function LearningPlanCard({
     status,
     title,
-    difficulty,
     percentage,
     nextSession,
     pausedDate,

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { FileText, Link as LinkIcon, FileUp, Paperclip, Mic, Sparkles, ArrowRight } from 'lucide-react';
 import LearningPlanCard from '../components/LearningPlanCard';
 import LearningNoteCard from '../components/LearningNoteCard';
@@ -9,23 +10,41 @@ export default function Dashboard() {
     const learningPlans = [
         {
             status: 'active' as const,
+            category: 'SCIENCE',
+            categoryColor: 'blue' as const,
             title: 'Introduction to Neuroscience',
             difficulty: 'Intermediate',
             percentage: 78,
+            module: 'Synaptic Transmission & Plasticity',
+            timeRemaining: '4h 30m left',
+            totalModules: 12,
+            completedModules: 9,
             nextSession: '12 mins remaining',
         },
         {
             status: 'active' as const,
+            category: 'HUMANITIES',
+            categoryColor: 'orange' as const,
             title: 'Modern European History',
             difficulty: 'Advanced',
             percentage: 34,
+            module: 'The Industrial Revolution',
+            timeRemaining: '12h left',
+            totalModules: 15,
+            completedModules: 5,
             nextSession: '45 mins remaining',
         },
         {
             status: 'active' as const,
+            category: 'TECH',
+            categoryColor: 'purple' as const,
             title: 'Python for Data Science',
             difficulty: 'Beginner',
             percentage: 12,
+            module: 'Pandas & NumPy Basics',
+            timeRemaining: '28h left',
+            totalModules: 10,
+            completedModules: 1,
             nextSession: '2h 15m remaining',
         },
     ];
@@ -33,27 +52,42 @@ export default function Dashboard() {
     const learningNotes = [
         {
             type: 'video' as const,
-            title: 'The Renaissance Art Movement',
-            description: 'Comprehensive overview of key figures like da Vinci and...',
-            tags: ['History', '16thCentury'],
+            title: 'Deep Learning Fundamentals',
+            description: 'Comprehensive overview of neural network architectures and backpropagation algorithms.',
+            tags: [
+                { type: 'format' as const, label: 'Video' },
+                { type: 'format' as const, label: 'Notes' },
+                { type: 'topic' as const, label: 'DeepML' },
+                { type: 'style' as const, label: 'Deep Dive' }
+            ],
             author: 'AI Summary',
             timestamp: '2h ago',
         },
         {
             type: 'pdf' as const,
-            title: 'Intro to Neural Networks',
-            description: 'Foundational concepts of backpropagation and activation...',
-            tags: ['DeepML', 'AI'],
-            author: 'Key Concepts',
-            timestamp: '1d ago',
+            title: 'The Renaissance Art Movement',
+            description: 'Key figures like da Vinci and Michelangelo and their impact on European culture.',
+            tags: [
+                { type: 'format' as const, label: 'PDF' },
+                { type: 'format' as const, label: 'Slides' },
+                { type: 'topic' as const, label: 'History' },
+                { type: 'topic' as const, label: 'Art' }
+            ],
+            author: 'Lecture Notes',
+            timestamp: '5h ago',
         },
         {
             type: 'audio' as const,
-            title: 'Organic Compounds List',
-            description: 'Audio recording of the professor fixing essential organic...',
-            tags: ['Science', 'Chem'],
+            title: 'Quantum Physics: Superposition',
+            description: 'Understanding the principles of superposition and quantum states.',
+            tags: [
+                { type: 'format' as const, label: 'Audio' },
+                { type: 'format' as const, label: 'Transcript' },
+                { type: 'style' as const, label: 'Deep Dive' },
+                { type: 'topic' as const, label: 'Physics' }
+            ],
             author: 'Transcript',
-            timestamp: '5d ago',
+            timestamp: '1d ago',
         },
     ];
 
@@ -69,8 +103,8 @@ export default function Dashboard() {
                         <button
                             onClick={() => setActiveTab('raw-notes')}
                             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'raw-notes'
-                                    ? 'text-trust-blue border-b-2 border-trust-blue'
-                                    : 'text-gray-600 hover:text-gray-900'
+                                ? 'text-trust-blue border-b-2 border-trust-blue'
+                                : 'text-gray-600 hover:text-gray-900'
                                 }`}
                         >
                             <FileText className="w-4 h-4" />
@@ -79,8 +113,8 @@ export default function Dashboard() {
                         <button
                             onClick={() => setActiveTab('url-input')}
                             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'url-input'
-                                    ? 'text-trust-blue border-b-2 border-trust-blue'
-                                    : 'text-gray-600 hover:text-gray-900'
+                                ? 'text-trust-blue border-b-2 border-trust-blue'
+                                : 'text-gray-600 hover:text-gray-900'
                                 }`}
                         >
                             <LinkIcon className="w-4 h-4" />
@@ -89,8 +123,8 @@ export default function Dashboard() {
                         <button
                             onClick={() => setActiveTab('upload-pdf')}
                             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'upload-pdf'
-                                    ? 'text-trust-blue border-b-2 border-trust-blue'
-                                    : 'text-gray-600 hover:text-gray-900'
+                                ? 'text-trust-blue border-b-2 border-trust-blue'
+                                : 'text-gray-600 hover:text-gray-900'
                                 }`}
                         >
                             <FileUp className="w-4 h-4" />
@@ -132,7 +166,9 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {learningPlans.map((plan, index) => (
-                        <LearningPlanCard key={index} {...plan} />
+                        <Link key={index} to={`/plans/${index + 1}`}>
+                            <LearningPlanCard {...plan} />
+                        </Link>
                     ))}
                 </div>
             </div>
@@ -148,7 +184,9 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {learningNotes.map((note, index) => (
-                        <LearningNoteCard key={index} {...note} />
+                        <Link key={index} to={`/notes/${index + 1}`} className="block">
+                            <LearningNoteCard {...note} />
+                        </Link>
                     ))}
                 </div>
             </div>
