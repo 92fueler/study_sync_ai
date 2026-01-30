@@ -239,6 +239,155 @@ CREATE INDEX idx_notifications_user ON notifications(user_id, read);
 CREATE INDEX idx_notifications_unsent ON notifications(sent) WHERE NOT sent;
 
 -- ===========================================
+-- 9. LEARNING PLANS
+-- ===========================================
+CREATE TABLE learning_plans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  title TEXT,
+  description TEXT,
+  goal TEXT,
+  status TEXT DEFAULT 'proposed' CHECK (status IN ('proposed', 'active', 'paused', 'completed', 'archived')),
+  difficulty TEXT,
+  category TEXT,
+  category_color TEXT,
+  estimated_time TEXT,
+  module_count INT,
+  progress_percent INT DEFAULT 0,
+  total_modules INT,
+  completed_modules INT,
+  next_session_at TIMESTAMPTZ,
+  paused_at TIMESTAMPTZ,
+  weeks INT,
+  sessions_per_week INT,
+  details JSONB,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_learning_plans_user ON learning_plans(user_id);
+CREATE INDEX idx_learning_plans_status ON learning_plans(user_id, status);
+
+CREATE TABLE learning_plan_items (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  plan_id UUID REFERENCES learning_plans(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  content_ids UUID[],
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'scheduled', 'done', 'skipped')),
+  order_index INT DEFAULT 0,
+  estimated_minutes INT,
+  scheduled_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_learning_plan_items_plan ON learning_plan_items(plan_id);
+CREATE INDEX idx_learning_plan_items_user ON learning_plan_items(user_id);
+
+-- ===========================================
+-- 10. LEARNING NOTES
+-- ===========================================
+CREATE TABLE learning_notes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  note_type TEXT NOT NULL CHECK (note_type IN ('pdf', 'video', 'audio', 'image', 'url', 'text')),
+  title TEXT NOT NULL,
+  description TEXT,
+  tags JSONB,
+  author TEXT,
+  topic TEXT,
+  thumbnail_url TEXT,
+  source_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_learning_notes_user ON learning_notes(user_id);
+CREATE INDEX idx_learning_notes_topic ON learning_notes(user_id, topic);
+
+-- ===========================================
+-- 11. INGESTION JOBS
+-- ===========================================
+CREATE TABLE ingestion_jobs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  job_type TEXT NOT NULL CHECK (job_type IN ('pdf', 'video', 'audio', 'image', 'url', 'text')),
+  status TEXT NOT NULL CHECK (status IN ('ingesting', 'style-matching', 'ready', 'failed')),
+  progress INT DEFAULT 0,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_ingestion_jobs_user ON ingestion_jobs(user_id, status);
+
+-- ===========================================
+-- 12. USER SETTINGS
+-- ===========================================
+CREATE TABLE user_settings (
+  user_id TEXT PRIMARY KEY,
+  theme TEXT DEFAULT 'light',
+  notifications JSONB DEFAULT '{
+    "in_app": true,
+    "email": false,
+    "push": false
+  }'::jsonb,
+  timezone TEXT,
+  study_preferences JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ===========================================
+-- 13. CALENDAR INTEGRATIONS (LOCAL-FIRST)
+-- ===========================================
+CREATE TABLE calendar_accounts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('local', 'google', 'microsoft', 'apple')),
+  email TEXT,
+  status TEXT DEFAULT 'disconnected' CHECK (status IN ('connected', 'disconnected')),
+  auth_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_calendar_accounts_user ON calendar_accounts(user_id);
+
+CREATE TABLE calendar_calendars (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('local', 'google', 'microsoft', 'apple')),
+  external_id TEXT,
+  name TEXT NOT NULL,
+  is_primary BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_calendar_calendars_user ON calendar_calendars(user_id);
+
+CREATE TABLE calendar_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL DEFAULT 'local' CHECK (provider IN ('local', 'google', 'microsoft', 'apple')),
+  calendar_id UUID REFERENCES calendar_calendars(id) ON DELETE SET NULL,
+  external_id TEXT,
+  title TEXT NOT NULL,
+  description TEXT,
+  start_time TIMESTAMPTZ NOT NULL,
+  end_time TIMESTAMPTZ NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_calendar_events_user ON calendar_events(user_id, start_time);
+
+-- ===========================================
 -- ROW LEVEL SECURITY (RLS)
 -- ===========================================
 ALTER TABLE user_materials ENABLE ROW LEVEL SECURITY;
@@ -248,6 +397,14 @@ ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE background_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE behavior_signals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE learning_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE learning_plan_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE learning_notes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ingestion_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calendar_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calendar_calendars ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calendar_events ENABLE ROW LEVEL SECURITY;
 
 -- For demo: allow all access (no auth)
 -- In production: replace with proper auth.uid() policies
@@ -259,6 +416,14 @@ CREATE POLICY "Allow all for demo" ON feedback FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON background_jobs FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON behavior_signals FOR ALL USING (true);
 CREATE POLICY "Allow all for demo" ON notifications FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON learning_plans FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON learning_plan_items FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON learning_notes FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON ingestion_jobs FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON user_settings FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON calendar_accounts FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON calendar_calendars FOR ALL USING (true);
+CREATE POLICY "Allow all for demo" ON calendar_events FOR ALL USING (true);
 
 -- Content items are shared (no RLS needed)
 
