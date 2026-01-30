@@ -1,35 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, FileText, Video, Headphones, Image as ImageIcon, Link as LinkIcon, Loader2, CheckCircle, Sparkles, Filter } from 'lucide-react';
+import { Upload, FileText, Video, Headphones, Link as LinkIcon, Filter } from 'lucide-react';
 import LearningNoteCard from '../components/LearningNoteCard';
 
-type ProcessingStatus = 'ingesting' | 'style-matching' | 'ready';
 
-interface ProcessingFile {
-    id: string;
-    name: string;
-    type: 'pdf' | 'video' | 'audio' | 'image' | 'url';
-    status: ProcessingStatus;
-    progress?: number;
-}
 
 export default function KnowledgeBank() {
-    const [processingFiles] = useState<ProcessingFile[]>([
-        {
-            id: '1',
-            name: 'Neural Networks Lecture.mp4',
-            type: 'video',
-            status: 'ingesting',
-            progress: 45,
-        },
-        {
-            id: '2',
-            name: 'Quantum Physics Notes.pdf',
-            type: 'pdf',
-            status: 'style-matching',
-            progress: 78,
-        },
-    ]);
+
 
     const [selectedTopic, setSelectedTopic] = useState<string>('all');
     const [selectedFormat, setSelectedFormat] = useState<string>('all');
@@ -147,34 +124,7 @@ export default function KnowledgeBank() {
         return matchesTopic && matchesFormat && matchesStyle;
     });
 
-    const statusConfig = {
-        ingesting: {
-            label: 'Ingesting',
-            color: 'bg-blue-100 text-blue-700',
-            icon: Loader2,
-            iconClass: 'animate-spin',
-        },
-        'style-matching': {
-            label: 'Style-Matching',
-            color: 'bg-purple-100 text-purple-700',
-            icon: Sparkles,
-            iconClass: 'animate-pulse',
-        },
-        ready: {
-            label: 'Ready',
-            color: 'bg-green-100 text-green-700',
-            icon: CheckCircle,
-            iconClass: '',
-        },
-    };
 
-    const fileTypeIcons = {
-        pdf: FileText,
-        video: Video,
-        audio: Headphones,
-        image: ImageIcon,
-        url: LinkIcon,
-    };
 
     return (
         <div className="max-w-7xl mx-auto px-6 py-12">
@@ -229,44 +179,7 @@ export default function KnowledgeBank() {
                 </div>
             </div>
 
-            {/* Live Processing Status */}
-            {processingFiles.length > 0 && (
-                <div className="mb-10">
-                    <h2 className="text-xl font-semibold text-gray-900 mb-4">Processing</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {processingFiles.map((file) => {
-                            const config = statusConfig[file.status];
-                            const Icon = config.icon;
-                            const FileIcon = fileTypeIcons[file.type];
 
-                            return (
-                                <div key={file.id} className="bg-white rounded-lg p-4 shadow-sm border border-gray-200">
-                                    <div className="flex items-start gap-3 mb-3">
-                                        <div className="p-2 bg-gray-100 rounded">
-                                            <FileIcon className="w-5 h-5 text-gray-600" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="font-medium text-gray-900 truncate">{file.name}</h3>
-                                            <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold mt-1 ${config.color}`}>
-                                                <Icon className={`w-3 h-3 ${config.iconClass}`} />
-                                                {config.label}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {file.progress !== undefined && (
-                                        <div className="w-full bg-gray-200 rounded-full h-2">
-                                            <div
-                                                className="bg-trust-blue h-2 rounded-full transition-all duration-300"
-                                                style={{ width: `${file.progress}%` }}
-                                            ></div>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
 
             {/* Filters Bar */}
             <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm mb-8">
