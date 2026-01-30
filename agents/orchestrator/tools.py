@@ -139,9 +139,9 @@ async def _get_job_status_async(job_id: str) -> Dict[str, Any]:
             "priority": row["priority"],
             "attempts": row["attempts"],
             "created_at": str(row["created_at"]),
-            "started_at": str(row.get("started_at", "")),
-            "completed_at": str(row.get("completed_at", "")),
-            "error_message": row.get("error_message")
+            "started_at": str(row["started_at"]) if "started_at" in row and row["started_at"] else "",
+            "completed_at": str(row["completed_at"]) if "completed_at" in row and row["completed_at"] else "",
+            "error_message": row["error_message"] if "error_message" in row else None
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
@@ -184,7 +184,7 @@ async def _get_notifications_async(user_id: str, unread_only: bool) -> Dict[str,
                     "channel": r["channel"],
                     "title": r["title"],
                     "body": r["body"],
-                    "data": json.loads(r["data"]) if r.get("data") else None,
+                    "data": json.loads(r["data"]) if isinstance(r.get("data"), str) else r.get("data"),
                     "read": r["read"],
                     "created_at": str(r["created_at"])
                 }
