@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Clock, Calendar, Zap, Headphones, Video, Edit, RefreshCw, CheckCircle, ChevronDown, MonitorPlay } from 'lucide-react';
+import { X, Clock, Calendar, Zap, Headphones, Video, Edit, RefreshCw, CheckCircle, ChevronDown, MonitorPlay, Loader2 } from 'lucide-react';
 
 interface PlanDetailsModalProps {
     isOpen: boolean;
@@ -30,6 +30,14 @@ interface PlanDetailsModalProps {
     onRegenerate?: () => void;
 }
 
+interface MockSession {
+    id: number;
+    date: string;
+    time: string;
+    topic: string;
+    duration: string;
+}
+
 export default function PlanDetailsModal({
     isOpen,
     onClose,
@@ -39,8 +47,36 @@ export default function PlanDetailsModal({
     onRegenerate,
 }: PlanDetailsModalProps) {
     const [isRegenerateMenuOpen, setIsRegenerateMenuOpen] = useState(false);
+    const [calendarStatus, setCalendarStatus] = useState<'idle' | 'checking' | 'preview' | 'booked'>('idle');
+    const [previewSessions, setPreviewSessions] = useState<MockSession[]>([]);
 
     if (!isOpen) return null;
+
+    //Mock Session Generator
+    const generateSessions = () => {
+        const sessions = [];
+        const days = ['Mon', 'Wed', 'Fri'];
+        const topics = plan.proposedTimeline.slice(0, 3).map(t => t.topic); // Take mock topics
+
+        for (let i = 0; i < 3; i++) {
+            sessions.push({
+                id: i,
+                date: `Oct ${14 + (i * 2)} (${days[i]})`,
+                time: '08:00 AM',
+                topic: topics[i] || 'Core Concept',
+                duration: '45m'
+            });
+        }
+        return sessions;
+    };
+
+    const handleCheckAvailability = () => {
+        setCalendarStatus('checking');
+        setTimeout(() => {
+            setPreviewSessions(generateSessions());
+            setCalendarStatus('preview');
+        }, 1500);
+    };
 
     // Regeneration Options
     const regenOptions = [
@@ -150,23 +186,77 @@ export default function PlanDetailsModal({
                         </div>
                     </div>
 
-                    {/* Google Calendar Banner (Proposed Schedule) */}
-                    {plan.proposedSchedule && (
+                    {/* Dynamic Calendar Section */}
+                    {calendarStatus === 'idle' && (
                         <div className="bg-blue-50 rounded-xl p-5 border border-blue-100 flex items-center justify-between shadow-sm">
                             <div className="flex items-center gap-4">
                                 <div className="p-3 bg-white rounded-xl shadow-sm border border-blue-50">
                                     <Calendar className="w-6 h-6 text-trust-blue" />
                                 </div>
                                 <div>
-                                    <h4 className="font-bold text-gray-900 text-sm">Connect Google Calendar</h4>
+                                    <h4 className="font-bold text-gray-900 text-sm">Sync with Google Calendar</h4>
                                     <p className="text-xs text-blue-700 mt-1">
-                                        Sync <strong>{plan.proposedSchedule.topic}</strong> sessions to avoid conflicts.
+                                        Check availability to avoid conflicts with your <strong>{plan.title}</strong> sessions.
                                     </p>
                                 </div>
                             </div>
-                            <button className="px-4 py-2 bg-white text-trust-blue text-sm font-bold rounded-lg shadow-sm border border-blue-100 hover:bg-blue-50 transition-colors">
-                                Connect Calendar
+                            <button
+                                onClick={handleCheckAvailability}
+                                className="px-4 py-2 bg-white text-trust-blue text-sm font-bold rounded-lg shadow-sm border border-blue-100 hover:bg-blue-50 transition-colors flex items-center gap-2"
+                            >
+                                <RefreshCw className="w-4 h-4" />
+                                Check Availability
                             </button>
+                        </div>
+                    )}
+
+                    {calendarStatus === 'checking' && (
+                        <div className="bg-blue-50 rounded-xl p-8 border border-blue-100 flex flex-col items-center justify-center text-center">
+                            <Loader2 className="w-8 h-8 text-trust-blue animate-spin mb-3" />
+                            <h4 className="font-bold text-gray-900 text-sm">Checking Availability...</h4>
+                            <p className="text-xs text-blue-700 mt-1">Finding the perfect slots for your learning sessions.</p>
+                        </div>
+                    )}
+
+                    {calendarStatus === 'preview' && (
+                        <div className="bg-white rounded-xl border-2 border-trust-blue p-5 shadow-md">
+                            <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                    <h4 className="font-bold text-gray-900 text-sm">Proposed Schedule</h4>
+                                </div>
+                                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100">
+                                    3 Slots Found
+                                </span>
+                            </div>
+
+                            <div className="space-y-3">
+                                {previewSessions.map((session) => (
+                                    <div key={session.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 group hover:border-blue-200 transition-colors">
+                                        <div className="flex items-center gap-4">
+                                            <div className="text-center min-w-[3.5rem] bg-white rounded-md p-1 border border-gray-200 shadow-sm">
+                                                <span className="block text-[10px] font-bold text-gray-500 uppercase">{session.date.split(' ')[2].replace('(', '').replace(')', '')}</span>
+                                                <span className="block text-lg font-bold text-gray-900 leading-none">{session.date.split(' ')[1]}</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-bold text-gray-900">{session.topic}</p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                                        <Clock className="w-3 h-3" /> {session.time}
+                                                    </span>
+                                                    <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                                        <Zap className="w-3 h-3" /> {session.duration}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <p className="text-xs text-gray-500 text-center mt-4">
+                                Matches your "Low Intensity" preference (Morning slots).
+                            </p>
                         </div>
                     )}
                 </div>
@@ -216,12 +306,26 @@ export default function PlanDetailsModal({
                             )}
                         </div>
 
+                        {/* Action Button Changes based on Calendar Status */}
                         <button
                             onClick={onApprove}
-                            className="px-6 py-2.5 bg-trust-blue text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-md flex items-center gap-2"
+                            disabled={calendarStatus !== 'preview'}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-md transition-all ${calendarStatus === 'preview'
+                                ? 'bg-trust-blue text-white hover:bg-blue-700 hover:shadow-lg transform hover:-translate-y-0.5'
+                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                }`}
                         >
-                            <CheckCircle className="w-4 h-4" />
-                            Approve & Sync Schedule
+                            {calendarStatus === 'preview' ? (
+                                <>
+                                    <CheckCircle className="w-4 h-4" />
+                                    Confirm Booking
+                                </>
+                            ) : (
+                                <>
+                                    <Calendar className="w-4 h-4" />
+                                    Approve & Sync Schedule
+                                </>
+                            )}
                         </button>
                     </div>
                 </div>
