@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import Onboarding from './pages/Onboarding';
 import LearningPlan from './pages/LearningPlan';
 import KnowledgeBank from './pages/KnowledgeBank';
+import NoteDetail from './pages/NoteDetail';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="/dna" element={<Onboarding />} />
           <Route path="/plan" element={<LearningPlan />} />
           <Route path="/bank" element={<KnowledgeBank />} />
+          <Route path="/notes/:id" element={<NoteDetail />} />
         </Routes>
       </Layout>
     </BrowserRouter>

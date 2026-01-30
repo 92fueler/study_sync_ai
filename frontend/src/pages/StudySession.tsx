@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { Bookmark, Play, Pause, SkipBack, SkipForward, CheckCircle, Calendar, PauseCircle } from 'lucide-react'
+import { Bookmark, Play, Pause, SkipBack, SkipForward, CheckCircle, PauseCircle } from 'lucide-react'
 import { cn } from '../utils/cn'
-import { getArtifact } from '../api/client'
 import Mermaid from '../components/Mermaid'
 
 interface StudySessionProps {
-  userId: string
+  userId?: string
 }
 
 interface SessionContent {
@@ -23,14 +22,14 @@ interface SessionContent {
   }>
 }
 
-export default function StudySession({ userId }: StudySessionProps) {
+export default function StudySession({ }: StudySessionProps) {
   const { sessionId } = useParams<{ sessionId: string }>()
   const [content, setContent] = useState<SessionContent | null>(null)
   const [context, setContext] = useState<'commute' | 'read' | 'quiz'>('commute')
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(765) // 12:45 in seconds
-  const [progress, setProgress] = useState(35)
+  const [duration] = useState(765) // 12:45 in seconds
+  const [progress] = useState(35)
   const [isPaused, setIsPaused] = useState(false)
 
   useEffect(() => {
@@ -40,7 +39,7 @@ export default function StudySession({ userId }: StudySessionProps) {
   const loadSessionContent = async () => {
     try {
       if (sessionId) {
-        const artifact = await getArtifact(sessionId)
+        // const artifact = await getArtifact(sessionId)
         // Transform API response to match our SessionContent interface
         // This is a mock - adjust based on actual API response
         setContent({
@@ -53,8 +52,8 @@ export default function StudySession({ userId }: StudySessionProps) {
               title: 'Core Concepts',
               content: 'Quantum superposition is a fundamental principle of quantum mechanics. Unlike classical objects that exist in a single, well-defined state, quantum particles can exist in multiple states simultaneously until observed.',
               mermaidCode: `graph LR
-    A[Quantum Particle] -->|Observation Event| B[State Collapse]
-    B --> C[Definite State]
+A[Quantum Particle]-->| Observation Event | B[State Collapse]
+B-- > C[Definite State]
     style A fill:#3b82f6
     style B fill:#9333ea
     style C fill:#10b981`,
@@ -85,7 +84,7 @@ export default function StudySession({ userId }: StudySessionProps) {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} `
   }
 
   const handlePlayPause = () => {
@@ -240,7 +239,7 @@ export default function StudySession({ userId }: StudySessionProps) {
                     key={i}
                     className="w-1 bg-blue-500 rounded-full"
                     style={{
-                      height: `${Math.random() * 100}%`,
+                      height: `${Math.random() * 100}% `,
                     }}
                   />
                 ))}
@@ -258,7 +257,7 @@ export default function StudySession({ userId }: StudySessionProps) {
               <div className="w-full bg-gray-700 rounded-full h-2">
                 <div
                   className="bg-blue-500 h-2 rounded-full transition-all"
-                  style={{ width: `${(currentTime / duration) * 100}%` }}
+                  style={{ width: `${(currentTime / duration) * 100}% ` }}
                 />
               </div>
 
@@ -315,7 +314,7 @@ export default function StudySession({ userId }: StudySessionProps) {
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-green-500 h-2 rounded-full transition-all"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${progress}% ` }}
               />
             </div>
             <p className="text-sm text-gray-500 mt-2">15 min remaining</p>
