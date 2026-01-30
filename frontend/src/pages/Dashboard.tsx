@@ -166,7 +166,9 @@ export default function Dashboard() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {learningPlans.map((plan, index) => (
-                        <LearningPlanCard key={index} {...plan} />
+                        <Link key={index} to={`/plans/${index + 1}`}>
+                            <LearningPlanCard {...plan} />
+                        </Link>
                     ))}
                 </div>
             </div>

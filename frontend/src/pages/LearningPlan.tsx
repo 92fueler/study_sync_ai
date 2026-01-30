@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import LearningPlanCard from '../components/LearningPlanCard';
 import ProposedPlanCard from '../components/ProposedPlanCard';
@@ -296,7 +297,9 @@ export default function LearningPlan() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredPlans.map((plan, index) => (
-                        <LearningPlanCard key={index} {...plan} />
+                        <Link key={index} to={`/plans/${index + 1}`}>
+                            <LearningPlanCard {...plan} />
+                        </Link>
                     ))}
                 </div>
             )}
