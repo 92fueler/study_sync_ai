@@ -1,11 +1,58 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Headphones, Video, FileText, Image as ImageIcon, HelpCircle, Lightbulb, Share2, Mic, MonitorPlay } from 'lucide-react';
+import { getSettings, updateSettings } from '../api/client';
 
 export default function Onboarding() {
     const [selectedFormats, setSelectedFormats] = useState<string[]>(['audio', 'notes']);
     const [selectedPreferences, setSelectedPreferences] = useState<string[]>(['quizzes', 'analogies']);
     const [customStyle, setCustomStyle] = useState('');
     const [cognitiveTone, setCognitiveTone] = useState('socratic');
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveMessage, setSaveMessage] = useState<string | null>(null);
+    const [userId, setUserId] = useState('');
+
+    const normalizePref = (value: string) => value.replace(/_/g, ' ');
+
+    const loadSettings = async (resolvedUserId: string) => {
+        try {
+            const response = await getSettings(resolvedUserId);
+            const prefs = response?.study_preferences;
+            if (!prefs) return;
+
+            if (Array.isArray(prefs.formats)) {
+                setSelectedFormats(prefs.formats);
+            }
+            if (Array.isArray(prefs.preferences)) {
+                setSelectedPreferences(prefs.preferences);
+            }
+            if (typeof prefs.custom_style === 'string') {
+                setCustomStyle(prefs.custom_style);
+            }
+            if (typeof prefs.cognitive_tone === 'string') {
+                setCognitiveTone(prefs.cognitive_tone);
+            }
+            if (typeof response?.updated_at === 'string') {
+                setSaveMessage(`Last saved: ${new Date(response.updated_at).toLocaleString()}`);
+            }
+        } catch (error) {
+            console.error('Failed to load DNA settings', error);
+        }
+    };
+
+    const resolveUserId = () => {
+        const storedUserId = localStorage.getItem('user_id');
+        const resolved = storedUserId || `user_${Date.now()}`;
+        if (!storedUserId) {
+            localStorage.setItem('user_id', resolved);
+        }
+        return resolved;
+    };
+
+    useEffect(() => {
+        const resolved = resolveUserId();
+        setUserId(resolved);
+        void loadSettings(resolved);
+    }, []);
 
     const toggleFormat = (format: string) => {
         setSelectedFormats(prev =>
@@ -222,7 +269,10 @@ export default function Onboarding() {
                         </div>
 
                         <h4 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                            {selectedPreferences.slice(0, 2).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' & ') || 'Custom'} Learner
+                            {selectedPreferences
+                                .slice(0, 2)
+                                .map((p) => normalizePref(p).charAt(0).toUpperCase() + normalizePref(p).slice(1))
+                                .join(' & ') || 'Custom'} Learner
                         </h4>
                         <p className="text-sm text-gray-600 text-center mb-4">
                             Your profile is optimized for <strong>{selectedFormats.join(', ')}</strong> content with {cognitiveTone} tone.
@@ -240,16 +290,59 @@ export default function Onboarding() {
                         </div>
 
                         <button
-                            onClick={() => {
-                                localStorage.setItem('hasOnboarded', 'true');
-                                window.location.href = '/'; // Simple redirect to force re-render/route check if needed, or use navigate
+                            onClick={async () => {
+                                const resolvedUserId = userId || resolveUserId();
+                                if (!userId) {
+                                    setUserId(resolvedUserId);
+                                }
+                                setIsSaving(true);
+                                setSaveMessage(null);
+                                try {
+                                    const saved = await updateSettings(resolvedUserId, {
+                                        study_preferences: {
+                                            formats: selectedFormats,
+                                            preferences: selectedPreferences,
+                                            custom_style: customStyle,
+                                            cognitive_tone: cognitiveTone,
+                                        },
+                                    });
+                                    localStorage.setItem('hasOnboarded', 'true');
+                                    setSaveMessage('Saved!');
+                                    if (saved?.updated_at) {
+                                        setSaveMessage(`Saved! ${new Date(saved.updated_at).toLocaleString()}`);
+                                    }
+                                    if (saved?.study_preferences) {
+                                        const prefs = saved.study_preferences as Record<string, unknown>;
+                                        if (Array.isArray(prefs.formats)) {
+                                            setSelectedFormats(prefs.formats as string[]);
+                                        }
+                                        if (Array.isArray(prefs.preferences)) {
+                                            setSelectedPreferences(prefs.preferences as string[]);
+                                        }
+                                        if (typeof prefs.custom_style === 'string') {
+                                            setCustomStyle(prefs.custom_style);
+                                        }
+                                        if (typeof prefs.cognitive_tone === 'string') {
+                                            setCognitiveTone(prefs.cognitive_tone);
+                                        }
+                                    }
+                                    await loadSettings(resolvedUserId);
+                                } catch (error) {
+                                    console.error('Failed to save DNA', error);
+                                    setSaveMessage('Save failed. Please try again.');
+                                } finally {
+                                    setIsSaving(false);
+                                }
                             }}
-                            className="w-full px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium mb-2"
+                            className="w-full px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium mb-2 disabled:opacity-60"
+                            disabled={isSaving}
                         >
-                            💾 Save & Continue
+                            {isSaving ? 'Saving…' : '💾 Save & Continue'}
                         </button>
 
-                        <p className="text-xs text-gray-500 text-center">Last updated: 2 hours ago</p>
+                        {saveMessage && (
+                            <p className="text-xs text-center text-gray-500 mb-2">{saveMessage}</p>
+                        )}
                     </div>
 
                     <div className="bg-gray-900 rounded-lg p-6 text-white">

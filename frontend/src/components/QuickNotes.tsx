@@ -1,9 +1,13 @@
 import { useState } from 'react';
 import { PenTool, Save, ChevronDown } from 'lucide-react';
+import { createNote } from '../api/client';
 
 interface QuickNotesProps {
     activeSection: string;
     onSectionChange: (section: string) => void;
+    userId: string;
+    sourceId?: string | null;
+    sourceTitle?: string | null;
 }
 
 const SECTIONS = [
@@ -14,16 +18,39 @@ const SECTIONS = [
     { id: 'audio-segment', label: 'Audio Segment' },
 ];
 
-export default function QuickNotes({ activeSection, onSectionChange }: QuickNotesProps) {
+export default function QuickNotes({ activeSection, onSectionChange, userId, sourceId, sourceTitle }: QuickNotesProps) {
     const [note, setNote] = useState('');
     const [isSaved, setIsSaved] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
-    const handleSave = () => {
-        setIsSaved(true);
-        // Simulate API save with context
-        console.log('Saving note:', { context: activeSection, content: note });
-        setTimeout(() => setIsSaved(false), 2000);
-        setNote('');
+    const handleSave = async () => {
+        if (!note.trim() || !userId) return;
+        setIsSaving(true);
+        setSaveMessage(null);
+        try {
+            await createNote({
+                user_id: userId,
+                note_type: 'text',
+                title: `Quick note: ${sourceTitle || activeSection}`,
+                description: note.trim(),
+                tags: [
+                    { type: 'topic', label: sourceTitle || 'Quick Note' },
+                    { type: 'style', label: activeSection },
+                ],
+                author: 'User',
+                source_id: sourceId || undefined,
+            });
+            setIsSaved(true);
+            setSaveMessage('Saved!');
+            setTimeout(() => setIsSaved(false), 2000);
+            setNote('');
+        } catch (error) {
+            console.error('Failed to save quick note', error);
+            setSaveMessage('Save failed.');
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     return (
@@ -61,10 +88,13 @@ export default function QuickNotes({ activeSection, onSectionChange }: QuickNote
                 className="w-full h-32 p-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-trust-blue focus:border-trust-blue resize-none mb-3 bg-gray-50 focus:bg-white transition-colors"
             />
 
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+                {saveMessage && (
+                    <span className="text-xs text-gray-500">{saveMessage}</span>
+                )}
                 <button
                     onClick={handleSave}
-                    disabled={!note.trim()}
+                    disabled={!note.trim() || isSaving}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded transition-all ${note.trim()
                         ? 'bg-trust-blue text-white hover:bg-blue-700 shadow-sm'
                         : 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -75,7 +105,7 @@ export default function QuickNotes({ activeSection, onSectionChange }: QuickNote
                     ) : (
                         <>
                             <Save className="w-3.5 h-3.5" />
-                            Save Note
+                            {isSaving ? 'Saving...' : 'Save Note'}
                         </>
                     )}
                 </button>

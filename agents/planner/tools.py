@@ -6,12 +6,16 @@ ADK tools for content prioritization using multi-signal algorithm.
 
 import asyncio
 import json
+import logging
 import os
 from typing import Dict, Any, List
 
 import asyncpg
 from google import genai
 
+logger = logging.getLogger(__name__)
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=os.getenv("AGENT_LOG_LEVEL", "INFO"))
 
 # Lazy-initialized Gemini client
 _client = None
@@ -35,7 +39,9 @@ WEIGHT_BEHAVIOR = 0.15
 
 
 async def _get_db_connection():
-    return await asyncpg.connect(os.getenv("SUPABASE_URL", ""))
+    dsn = os.getenv("SUPABASE_URL", "")
+    logger.debug("Connecting to DB for planner tools")
+    return await asyncpg.connect(dsn)
 
 
 def _run_async(coro):
@@ -64,6 +70,7 @@ def get_priority_queue(user_id: str, limit: int = 10) -> Dict[str, Any]:
     Returns:
         Dict with status and ranked queue containing content_id, title, priority_score, and reasoning
     """
+    logger.info("get_priority_queue called", extra={"user_id": user_id, "limit": limit})
     return _run_async(_get_priority_queue_async(user_id, limit))
 
 
@@ -86,6 +93,7 @@ async def _get_priority_queue_async(user_id: str, limit: int) -> Dict[str, Any]:
         )
         
         if not materials:
+            logger.info("get_priority_queue completed", extra={"user_id": user_id, "count": 0})
             return {"status": "success", "queue": [], "message": "No content to prioritize"}
         
         queue = []
@@ -124,8 +132,11 @@ async def _get_priority_queue_async(user_id: str, limit: int) -> Dict[str, Any]:
             })
         
         queue.sort(key=lambda x: x["priority_score"], reverse=True)
-        return {"status": "success", "queue": queue[:limit], "total_items": len(queue)}
+        result = {"status": "success", "queue": queue[:limit], "total_items": len(queue)}
+        logger.info("get_priority_queue completed", extra={"user_id": user_id, "count": len(result["queue"])})
+        return result
     except Exception as e:
+        logger.exception("get_priority_queue failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -218,6 +229,7 @@ def recalculate_priority(user_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status and fresh priority queue
     """
+    logger.info("recalculate_priority called", extra={"user_id": user_id})
     return get_priority_queue(user_id)
 
 
@@ -231,6 +243,7 @@ def cluster_topics(user_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status and topic clusters with their content
     """
+    logger.info("cluster_topics called", extra={"user_id": user_id})
     return _run_async(_cluster_topics_async(user_id))
 
 
@@ -257,8 +270,11 @@ async def _cluster_topics_async(user_id: str) -> Dict[str, Any]:
         
         clusters = [{"topic": t, "content_count": len(items), "items": items} for t, items in topic_map.items()]
         clusters.sort(key=lambda x: x["content_count"], reverse=True)
-        return {"status": "success", "clusters": clusters}
+        result = {"status": "success", "clusters": clusters}
+        logger.info("cluster_topics completed", extra={"user_id": user_id, "clusters": len(clusters)})
+        return result
     except Exception as e:
+        logger.exception("cluster_topics failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -274,6 +290,7 @@ def calculate_effort(content_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status, word_count, reading_minutes, study_minutes, complexity
     """
+    logger.info("calculate_effort called", extra={"content_id": content_id})
     return _run_async(_calculate_effort_async(content_id))
 
 
@@ -291,7 +308,7 @@ async def _calculate_effort_async(content_id: str) -> Dict[str, Any]:
         complexity_factor = 1.5 if len(topics) > 5 else 1.2 if len(topics) > 2 else 1.0
         study_minutes = int(reading_minutes * complexity_factor)
         
-        return {
+        result = {
             "status": "success",
             "content_id": content_id,
             "word_count": word_count,
@@ -299,7 +316,10 @@ async def _calculate_effort_async(content_id: str) -> Dict[str, Any]:
             "study_minutes": study_minutes,
             "complexity": "high" if complexity_factor >= 1.5 else "medium" if complexity_factor >= 1.2 else "low"
         }
+        logger.info("calculate_effort completed", extra={"content_id": content_id, "study_minutes": study_minutes})
+        return result
     except Exception as e:
+        logger.exception("calculate_effort failed", extra={"content_id": content_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()

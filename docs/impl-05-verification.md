@@ -295,6 +295,72 @@ curl http://localhost:8000/api/v1/notifications/badge?user_id=test-user
 4. Verify 5-min summaries still accessible
 5. Verify offline indicator shown
 
+### 8.3 Playwright E2E (refresh + read-after-write)
+
+These tests validate what the UI loads on refresh and assert API responses are 200.
+
+**Prereqs**
+
+- Backend running on `http://localhost:8000`
+- Frontend running on `http://localhost:3000`
+- Playwright browsers installed:
+
+```bash
+npx --prefix frontend playwright install
+```
+
+If Playwright reports missing system libraries, install deps (requires sudo):
+
+```bash
+sudo npx --prefix frontend playwright install-deps
+```
+
+**Run**
+
+```bash
+npm --prefix frontend run test:e2e
+```
+
+**Optional overrides**
+
+```bash
+E2E_BACKEND_URL=http://localhost:8000/api/v1 \
+E2E_FRONTEND_URL=http://localhost:3000 \
+npm --prefix frontend run test:e2e
+```
+
+**Expected**
+
+- Dashboard refresh loads recent notes + active plans (200 responses)
+- Learning Plan page loads active + proposed plans (200 responses)
+- Knowledge Bank loads notes + topics (200 responses)
+- Note/Plan detail pages load the correct record (200 responses)
+
+**E2E user stories covered (from DESIGN.md)**
+
+- User signs up and lands on Learning DNA (mock auth)
+- User saves Learning DNA and is redirected to dashboard (settings persisted)
+- User captures raw notes and generates structure (creates ingestion job, note, and proposed plan)
+- User visits dashboard and sees latest notes + active plans
+- User visits Knowledge Bank and sees notes + topic clusters
+- User visits Learning Plan page and can create a new plan
+- User opens a specific plan or note detail and sees content
+- User uploads a file from dashboard and ingestion job is created
+- User opens a study session and sees plan modules
+
+**Playwright tests**
+
+- `tests/e2e/onboarding-save.spec.ts` (signup + DNA save + preference payload)
+- `tests/e2e/dashboard-generate.spec.ts` (raw notes → ingestion/note/plan)
+- `tests/e2e/dashboard-actions.spec.ts` (dashboard tabs, uploads, view all links)
+- `tests/e2e/dashboard-refresh.spec.ts` (dashboard refresh)
+- `tests/e2e/knowledge-bank-refresh.spec.ts` (knowledge bank refresh)
+- `tests/e2e/learning-plan-create.spec.ts` (create plan)
+- `tests/e2e/learning-plan-refresh.spec.ts` (plans refresh)
+- `tests/e2e/detail-pages.spec.ts` (note/plan detail)
+- `tests/e2e/dashboard-upload.spec.ts` (file upload → ingestion)
+- `tests/e2e/study-session.spec.ts` (study session modules)
+
 ---
 
 ## 9. End-to-End Demo Flow

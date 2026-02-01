@@ -6,6 +6,8 @@ Tracks ingestion jobs for UI processing states (non-agent).
 
 from typing import Any, Dict, List, Optional
 
+import json
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -34,6 +36,11 @@ def _job_row_to_dict(row) -> Dict[str, Any]:
     job["id"] = str(job["id"])
     job["created_at"] = job.get("created_at")
     job["updated_at"] = job.get("updated_at")
+    if isinstance(job.get("metadata"), str):
+        try:
+            job["metadata"] = json.loads(job["metadata"])
+        except Exception:
+            pass
     return job
 
 
@@ -69,6 +76,7 @@ async def create_ingestion_job(request: IngestionCreate):
         RETURNING *
     """
     try:
+        metadata_payload = json.dumps(request.metadata) if request.metadata is not None else None
         row = await fetchrow(
             query,
             request.user_id,
@@ -76,7 +84,7 @@ async def create_ingestion_job(request: IngestionCreate):
             request.job_type,
             request.status,
             request.progress,
-            request.metadata,
+            metadata_payload,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
@@ -95,6 +103,8 @@ async def update_ingestion_job(job_id: str, user_id: str = Query(...), update: I
     idx = 1
 
     for field, value in update.model_dump(exclude_unset=True).items():
+        if field == "metadata" and value is not None:
+            value = json.dumps(value)
         updates.append(f"{field} = ${idx}")
         params.append(value)
         idx += 1

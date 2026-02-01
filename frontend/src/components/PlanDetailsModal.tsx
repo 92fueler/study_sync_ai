@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Clock, Calendar, Zap, Headphones, Video, Edit, RefreshCw, CheckCircle, ChevronDown, MonitorPlay, Loader2 } from 'lucide-react';
+import { X, Clock, Calendar, Zap, Headphones, Video, Edit, RefreshCw, CheckCircle, ChevronDown, MonitorPlay } from 'lucide-react';
 
 interface PlanDetailsModalProps {
     isOpen: boolean;
@@ -8,14 +8,14 @@ interface PlanDetailsModalProps {
         title: string;
         description?: string;
         isProposed?: boolean;
-        duration: string;
-        timeline: string;
-        intensity: string;
-        formatBreakdown: {
+        duration?: string;
+        timeline?: string;
+        intensity?: string;
+        formatBreakdown?: {
             audioSessions: number;
             deepDives: number;
         };
-        proposedTimeline: {
+        proposedTimeline?: {
             week: number;
             topic: string;
         }[];
@@ -23,19 +23,18 @@ interface PlanDetailsModalProps {
             week: number;
             topic: string;
             calendarInfo?: string;
+            sessions?: Array<{
+                id?: number | string;
+                date?: string;
+                time?: string;
+                topic?: string;
+                duration?: string;
+            }>;
         };
     };
     onApprove?: () => void;
     onCustomize?: () => void;
     onRegenerate?: () => void;
-}
-
-interface MockSession {
-    id: number;
-    date: string;
-    time: string;
-    topic: string;
-    duration: string;
 }
 
 export default function PlanDetailsModal({
@@ -47,36 +46,10 @@ export default function PlanDetailsModal({
     onRegenerate,
 }: PlanDetailsModalProps) {
     const [isRegenerateMenuOpen, setIsRegenerateMenuOpen] = useState(false);
-    const [calendarStatus, setCalendarStatus] = useState<'idle' | 'checking' | 'preview' | 'booked'>('idle');
-    const [previewSessions, setPreviewSessions] = useState<MockSession[]>([]);
+    const calendarStatus: 'idle' | 'preview' = plan.proposedSchedule?.sessions?.length ? 'preview' : 'idle';
+    const canApprove = Boolean(onApprove);
 
     if (!isOpen) return null;
-
-    //Mock Session Generator
-    const generateSessions = () => {
-        const sessions = [];
-        const days = ['Mon', 'Wed', 'Fri'];
-        const topics = plan.proposedTimeline.slice(0, 3).map(t => t.topic); // Take mock topics
-
-        for (let i = 0; i < 3; i++) {
-            sessions.push({
-                id: i,
-                date: `Oct ${14 + (i * 2)} (${days[i]})`,
-                time: '08:00 AM',
-                topic: topics[i] || 'Core Concept',
-                duration: '45m'
-            });
-        }
-        return sessions;
-    };
-
-    const handleCheckAvailability = () => {
-        setCalendarStatus('checking');
-        setTimeout(() => {
-            setPreviewSessions(generateSessions());
-            setCalendarStatus('preview');
-        }, 1500);
-    };
 
     // Regeneration Options
     const regenOptions = [
@@ -115,17 +88,17 @@ export default function PlanDetailsModal({
                         <div className="grid grid-cols-3 gap-3">
                             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-center">
                                 <Clock className="w-4 h-4 text-gray-400 mx-auto mb-1" />
-                                <p className="text-sm font-bold text-gray-900">{plan.duration}</p>
+                                <p className="text-sm font-bold text-gray-900">{plan.duration || 'Unknown'}</p>
                                 <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Duration</span>
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-center">
                                 <Calendar className="w-4 h-4 text-gray-400 mx-auto mb-1" />
-                                <p className="text-sm font-bold text-gray-900 whitespace-nowrap">{plan.timeline}</p>
+                                <p className="text-sm font-bold text-gray-900 whitespace-nowrap">{plan.timeline || 'Unknown'}</p>
                                 <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Timeline</span>
                             </div>
                             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-center">
                                 <Zap className="w-4 h-4 text-gray-400 mx-auto mb-1" />
-                                <p className="text-sm font-bold text-gray-900">{plan.intensity}</p>
+                                <p className="text-sm font-bold text-gray-900">{plan.intensity || 'Unknown'}</p>
                                 <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Intensity</span>
                             </div>
                         </div>
@@ -137,7 +110,7 @@ export default function PlanDetailsModal({
                                     <Headphones className="w-4 h-4 text-blue-600" />
                                 </div>
                                 <div>
-                                    <p className="text-lg font-bold text-gray-900 leading-none">{plan.formatBreakdown.audioSessions}</p>
+                                    <p className="text-lg font-bold text-gray-900 leading-none">{plan.formatBreakdown?.audioSessions ?? 0}</p>
                                     <p className="text-xs text-gray-500">Audio Sessions</p>
                                 </div>
                             </div>
@@ -146,7 +119,7 @@ export default function PlanDetailsModal({
                                     <Video className="w-4 h-4 text-purple-600" />
                                 </div>
                                 <div>
-                                    <p className="text-lg font-bold text-gray-900 leading-none">{plan.formatBreakdown.deepDives}</p>
+                                    <p className="text-lg font-bold text-gray-900 leading-none">{plan.formatBreakdown?.deepDives ?? 0}</p>
                                     <p className="text-xs text-gray-500">Deep Dives</p>
                                 </div>
                             </div>
@@ -156,34 +129,28 @@ export default function PlanDetailsModal({
                     {/* Timeline */}
                     <div className="mb-8">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-bold text-gray-900">Proposed Timeline (6 Weeks)</h3>
+                            <h3 className="text-base font-bold text-gray-900">Proposed Timeline</h3>
                             <button className="text-xs font-semibold text-trust-blue hover:text-blue-700">View Details</button>
                         </div>
 
-                        <div className="relative pt-2 pb-2">
-                            {/* Horizontal Line connecting dots */}
-                            <div className="absolute top-4 left-4 right-4 h-0.5 bg-gray-100" />
-
-                            <div className="grid grid-cols-6 gap-2 relative z-10">
-                                {plan.proposedTimeline.map((item, index) => (
-                                    <div key={index} className="text-center group flex flex-col items-center">
-                                        <div className="w-2.5 h-2.5 bg-trust-blue rounded-full border-2 border-white shadow-sm mb-2 relative z-10 box-content group-hover:scale-125 transition-transform" />
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">W{item.week}</p>
-                                        <p className="text-[10px] font-semibold text-gray-900 leading-tight w-full truncate px-1" title={item.topic}>
-                                            {item.topic.split(' ')[0]} {/* Show first word only for compactness, full text in tooltip */}
-                                        </p>
-                                    </div>
-                                ))}
-                                {/* Mocking extra weeks if needed to show 6 columns layout visual */}
-                                {[4, 5, 6].map(week => (
-                                    <div key={week} className="text-center group flex flex-col items-center opacity-50">
-                                        <div className="w-2.5 h-2.5 bg-gray-200 rounded-full border-2 border-white shadow-sm mb-2 relative z-10 box-content" />
-                                        <p className="text-[9px] font-bold text-gray-300 uppercase tracking-wider mb-0.5">W{week}</p>
-                                        <p className="text-[10px] font-semibold text-gray-400 leading-tight w-full truncate px-1">Concept</p>
-                                    </div>
-                                ))}
+                        {plan.proposedTimeline && plan.proposedTimeline.length > 0 ? (
+                            <div className="relative pt-2 pb-2">
+                                <div className="absolute top-4 left-4 right-4 h-0.5 bg-gray-100" />
+                                <div className={`grid gap-2 relative z-10 ${plan.proposedTimeline.length >= 6 ? 'grid-cols-6' : 'grid-cols-3 md:grid-cols-4 lg:grid-cols-6'}`}>
+                                    {plan.proposedTimeline.map((item, index) => (
+                                        <div key={index} className="text-center group flex flex-col items-center">
+                                            <div className="w-2.5 h-2.5 bg-trust-blue rounded-full border-2 border-white shadow-sm mb-2 relative z-10 box-content group-hover:scale-125 transition-transform" />
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">W{item.week}</p>
+                                            <p className="text-[10px] font-semibold text-gray-900 leading-tight w-full truncate px-1" title={item.topic}>
+                                                {item.topic.split(' ')[0]}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            <div className="text-sm text-gray-500">No timeline available yet.</div>
+                        )}
                     </div>
 
                     {/* Dynamic Calendar Section */}
@@ -201,20 +168,12 @@ export default function PlanDetailsModal({
                                 </div>
                             </div>
                             <button
-                                onClick={handleCheckAvailability}
-                                className="px-4 py-2 bg-white text-trust-blue text-sm font-bold rounded-lg shadow-sm border border-blue-100 hover:bg-blue-50 transition-colors flex items-center gap-2"
+                                disabled
+                                className="px-4 py-2 bg-white text-gray-400 text-sm font-bold rounded-lg shadow-sm border border-gray-200 flex items-center gap-2 cursor-not-allowed"
                             >
                                 <RefreshCw className="w-4 h-4" />
-                                Check Availability
+                                Calendar not connected
                             </button>
-                        </div>
-                    )}
-
-                    {calendarStatus === 'checking' && (
-                        <div className="bg-blue-50 rounded-xl p-8 border border-blue-100 flex flex-col items-center justify-center text-center">
-                            <Loader2 className="w-8 h-8 text-trust-blue animate-spin mb-3" />
-                            <h4 className="font-bold text-gray-900 text-sm">Checking Availability...</h4>
-                            <p className="text-xs text-blue-700 mt-1">Finding the perfect slots for your learning sessions.</p>
                         </div>
                     )}
 
@@ -226,26 +185,26 @@ export default function PlanDetailsModal({
                                     <h4 className="font-bold text-gray-900 text-sm">Proposed Schedule</h4>
                                 </div>
                                 <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full border border-green-100">
-                                    3 Slots Found
+                                    {plan.proposedSchedule?.sessions?.length || 0} Slots Found
                                 </span>
                             </div>
 
                             <div className="space-y-3">
-                                {previewSessions.map((session) => (
-                                    <div key={session.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 group hover:border-blue-200 transition-colors">
+                                {(plan.proposedSchedule?.sessions || []).map((session, index) => (
+                                    <div key={session.id ?? index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 group hover:border-blue-200 transition-colors">
                                         <div className="flex items-center gap-4">
                                             <div className="text-center min-w-[3.5rem] bg-white rounded-md p-1 border border-gray-200 shadow-sm">
-                                                <span className="block text-[10px] font-bold text-gray-500 uppercase">{session.date.split(' ')[2].replace('(', '').replace(')', '')}</span>
-                                                <span className="block text-lg font-bold text-gray-900 leading-none">{session.date.split(' ')[1]}</span>
+                                                <span className="block text-[10px] font-bold text-gray-500 uppercase">{session.date?.split(' ')[2]?.replace('(', '').replace(')', '') || 'Day'}</span>
+                                                <span className="block text-lg font-bold text-gray-900 leading-none">{session.date?.split(' ')[1] || index + 1}</span>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-bold text-gray-900">{session.topic}</p>
+                                                <p className="text-sm font-bold text-gray-900">{session.topic || 'Session'}</p>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-200">
-                                                        <Clock className="w-3 h-3" /> {session.time}
+                                                        <Clock className="w-3 h-3" /> {session.time || 'TBD'}
                                                     </span>
                                                     <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white px-2 py-0.5 rounded border border-gray-200">
-                                                        <Zap className="w-3 h-3" /> {session.duration}
+                                                        <Zap className="w-3 h-3" /> {session.duration || 'TBD'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -255,7 +214,7 @@ export default function PlanDetailsModal({
                             </div>
 
                             <p className="text-xs text-gray-500 text-center mt-4">
-                                Matches your "Low Intensity" preference (Morning slots).
+                                {plan.proposedSchedule?.calendarInfo || 'Schedule preview loaded from your plan.'}
                             </p>
                         </div>
                     )}
@@ -309,8 +268,8 @@ export default function PlanDetailsModal({
                         {/* Action Button Changes based on Calendar Status */}
                         <button
                             onClick={onApprove}
-                            disabled={calendarStatus !== 'preview'}
-                            className={`px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-md transition-all ${calendarStatus === 'preview'
+                            disabled={!canApprove}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 shadow-md transition-all ${canApprove
                                 ? 'bg-trust-blue text-white hover:bg-blue-700 hover:shadow-lg transform hover:-translate-y-0.5'
                                 : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                 }`}
@@ -323,7 +282,7 @@ export default function PlanDetailsModal({
                             ) : (
                                 <>
                                     <Calendar className="w-4 h-4" />
-                                    Approve & Sync Schedule
+                                    Approve Plan
                                 </>
                             )}
                         </button>

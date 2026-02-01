@@ -6,12 +6,16 @@ ADK tools for content ingestion, topic extraction, and embedding generation.
 
 import asyncio
 import json
+import logging
 import os
 from typing import Dict, Any, List, Optional
 
 import asyncpg
 from google import genai
 
+logger = logging.getLogger(__name__)
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=os.getenv("AGENT_LOG_LEVEL", "INFO"))
 
 # Lazy-initialized Gemini client
 _client = None
@@ -29,7 +33,9 @@ def _get_genai_client():
 
 async def _get_db_connection():
     """Get database connection."""
-    return await asyncpg.connect(os.getenv("SUPABASE_URL", ""))
+    dsn = os.getenv("SUPABASE_URL", "")
+    logger.debug("Connecting to DB for ingestion tools")
+    return await asyncpg.connect(dsn)
 
 
 def _run_async(coro):
@@ -68,6 +74,7 @@ def ingest_content(
     Returns:
         Dict with status, content_id, material_id, topics, and word_count
     """
+    logger.info("ingest_content called", extra={"user_id": user_id, "filename": filename, "media_type": media_type})
     return _run_async(
         _ingest_content_async(user_id, content_hash, filename, media_type, content_text)
     )
@@ -100,12 +107,14 @@ async def _ingest_content_async(
                 """,
                 user_id, existing["id"]
             )
-            return {
+            result = {
                 "status": "success",
                 "content_id": str(existing["id"]),
                 "material_id": str(material_row["id"]),
                 "deduplicated": True
             }
+            logger.info("ingest_content deduplicated", extra={"user_id": user_id, "content_id": result["content_id"]})
+            return result
         
         # Extract topics
         topics = await _extract_topics_async(content_text)
@@ -145,14 +154,17 @@ async def _ingest_content_async(
             user_id, content_id
         )
         
-        return {
+        result = {
             "status": "success",
             "content_id": content_id,
             "material_id": str(material_row["id"]),
             "topics": topics,
             "word_count": word_count
         }
+        logger.info("ingest_content completed", extra={"user_id": user_id, "content_id": content_id, "topics": len(topics) if topics else 0})
+        return result
     except Exception as e:
+        logger.exception("ingest_content failed", extra={"user_id": user_id, "filename": filename})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -168,6 +180,7 @@ def extract_topics(text: str) -> Dict[str, Any]:
     Returns:
         Dict with status and list of extracted topics
     """
+    logger.info("extract_topics called", extra={"chars": len(text or "")})
     topics = _run_async(_extract_topics_async(text))
     return {"status": "success", "topics": topics}
 
@@ -201,10 +214,11 @@ Return ONLY the JSON array, no other text:"""
         end = response_text.rfind("]") + 1
         if start >= 0 and end > start:
             topics = json.loads(response_text[start:end])
+            logger.info("extract_topics completed", extra={"topics": len(topics)})
             return topics[:10]
         return []
     except Exception as e:
-        print(f"Topic extraction failed: {e}")
+        logger.exception("extract_topics failed")
         return []
 
 
@@ -218,6 +232,7 @@ def generate_embedding(text: str) -> Dict[str, Any]:
     Returns:
         Dict with status, embedding vector and dimensions
     """
+    logger.info("generate_embedding called", extra={"chars": len(text or "")})
     embedding = _run_async(_generate_embedding_async(text))
     return {
         "status": "success",
@@ -241,7 +256,9 @@ async def _generate_embedding_async(text: str) -> Optional[List[float]]:
             model="gemini-embedding-001",
             contents=truncated
         )
-        return result.embeddings[0].values
+        values = result.embeddings[0].values
+        logger.info("generate_embedding completed", extra={"dims": len(values) if values else 0})
+        return values
     except Exception as e:
-        print(f"Embedding generation failed: {e}")
+        logger.exception("generate_embedding failed")
         return None

@@ -1,72 +1,84 @@
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import {
     ChevronLeft, Clock, BookOpen, Play, CheckCircle,
     Lock, Calendar, Award, ArrowRight, RefreshCw
 } from 'lucide-react';
+import { getLearningPlan } from '../api/client';
 
 export default function PlanDetail() {
+    const { id } = useParams<{ id: string }>();
+    const [userId, setUserId] = useState('');
+    const [plan, setPlan] = useState<any | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
     const handleCheckAvailability = () => {
-        alert("Checking calendar availability... \n\nSynced! You are free tomorrow at 3:00 PM.");
+        console.info('Calendar integration not configured.');
     };
 
-    // Mock Data for a specific plan
-    const plan = {
-        id: '1',
-        title: 'Introduction to Neuroscience',
-        description: 'Explore the biological foundations of behavior, from the structure of a single neuron to the complex organization of the brain.',
-        category: 'SCIENCE',
-        categoryColor: 'blue' as const,
-        difficulty: 'Intermediate',
-        progress: 65,
-        totalModules: 12,
-        completedModules: 7,
-        estimatedTimeLeft: '5h 30m',
-        nextSession: 'Tomorrow, 3:00 PM',
-        instructors: ['Dr. Sarah Chen', 'AI Tutor'],
-        modules: [
-            {
-                id: '1',
-                title: 'Neuron Structure & Function',
-                description: 'Anatomy of neurons, membrane potential, and action potentials.',
-                duration: '45 min',
-                status: 'completed' as const,
-                type: 'video',
-            },
-            {
-                id: '2',
-                title: 'Synaptic Transmission',
-                description: 'Mechanisms of neurotransmitter release and receptor activation.',
-                duration: '60 min',
-                status: 'in-progress' as const,
-                type: 'reading',
-                progress: 45,
-            },
-            {
-                id: '3',
-                title: 'Neuroplasticity',
-                description: 'How the brain changes in response to experience.',
-                duration: '50 min',
-                status: 'locked' as const,
-                type: 'quiz',
-            },
-            {
-                id: '4',
-                title: 'Sensory Systems',
-                description: 'Visual, auditory, and somatosensory processing pathways.',
-                duration: '1h 15m',
-                status: 'locked' as const,
-                type: 'video',
-            },
-            {
-                id: '5',
-                title: 'Motor Control',
-                description: 'From cortex to muscle: the spinal cord and motor pathways.',
-                duration: '55 min',
-                status: 'locked' as const,
-                type: 'video',
+    useEffect(() => {
+        const storedUserId = localStorage.getItem('user_id');
+        if (storedUserId) {
+            setUserId(storedUserId);
+            return;
+        }
+        const tempUserId = `user_${Date.now()}`;
+        localStorage.setItem('user_id', tempUserId);
+        setUserId(tempUserId);
+    }, []);
+
+    useEffect(() => {
+        if (!id || !userId) return;
+        const loadPlan = async () => {
+            try {
+                setLoading(true);
+                const response = await getLearningPlan(id, userId);
+                setPlan(response.plan || null);
+            } catch (error) {
+                console.error('Failed to load plan details', error);
+                setErrorMessage('Unable to load plan details.');
+            } finally {
+                setLoading(false);
             }
-        ]
+        };
+        void loadPlan();
+    }, [id, userId]);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-gray-500">Loading plan...</div>
+            </div>
+        );
+    }
+
+    if (!plan || errorMessage) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-gray-500">{errorMessage || 'Plan not found.'}</div>
+            </div>
+        );
+    }
+
+    type ModuleStatus = 'completed' | 'in-progress' | 'locked';
+    type ModuleItem = {
+        id: string;
+        title: string;
+        description: string;
+        duration: string;
+        status: ModuleStatus;
+        progress?: number;
     };
+
+    const modules: ModuleItem[] = (plan.items || []).map((item: any, index: number) => ({
+        id: item.id,
+        title: item.title || `Module ${index + 1}`,
+        description: item.description || 'No description provided.',
+        duration: item.estimated_minutes ? `${item.estimated_minutes} min` : '45 min',
+        status: item.status === 'done' ? 'completed' : item.status === 'scheduled' ? 'in-progress' : 'locked',
+        progress: item.progress_percent ?? undefined,
+    }));
 
     const statusIcons = {
         completed: CheckCircle,
@@ -98,7 +110,7 @@ export default function PlanDetail() {
                         <div className="flex-1">
                             <div className="flex items-center gap-3 mb-3">
                                 <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded uppercase tracking-wide">
-                                    {plan.category}
+                                    {plan.category || 'GENERAL'}
                                 </span>
                                 <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded uppercase tracking-wide">
                                     {plan.difficulty}
@@ -107,18 +119,23 @@ export default function PlanDetail() {
                             <h1 className="text-3xl md:text-4xl font-serif font-bold text-gray-900 mb-4">
                                 {plan.title}
                             </h1>
-                            <p className="text-gray-600 max-w-2xl text-lg leading-relaxed mb-6">
+                            <p className="text-gray-600 max-w-2xl text-lg leading-relaxed mb-3">
                                 {plan.description}
                             </p>
+                            {plan.goal && (
+                                <div className="text-sm text-gray-500 max-w-2xl">
+                                    <span className="font-semibold text-gray-700">Goal:</span> {plan.goal}
+                                </div>
+                            )}
 
                             <div className="flex items-center gap-6 text-sm text-gray-600">
                                 <div className="flex items-center gap-2">
                                     <Clock className="w-4 h-4 text-blue-500" />
-                                    <span>{plan.estimatedTimeLeft} left</span>
+                                    <span>{plan.estimated_time || '4 weeks'} left</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <BookOpen className="w-4 h-4 text-purple-500" />
-                                    <span>{plan.completedModules}/{plan.totalModules} modules</span>
+                                    <span>{plan.completed_modules || 0}/{plan.total_modules || plan.module_count || 0} modules</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <Award className="w-4 h-4 text-orange-500" />
@@ -131,12 +148,12 @@ export default function PlanDetail() {
                         <div className="w-full md:w-80 bg-white p-6 rounded-xl border border-gray-100 shadow-lg">
                             <div className="flex items-center justify-between mb-2">
                                 <span className="text-sm font-semibold text-gray-900">Total Progress</span>
-                                <span className="text-2xl font-bold text-blue-600">{plan.progress}%</span>
+                                <span className="text-2xl font-bold text-blue-600">{plan.progress_percent ?? 0}%</span>
                             </div>
                             <div className="w-full bg-gray-100 rounded-full h-2 mb-6">
                                 <div
                                     className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                                    style={{ width: `${plan.progress}%` }}
+                                    style={{ width: `${plan.progress_percent ?? 0}%` }}
                                 />
                             </div>
 
@@ -144,12 +161,14 @@ export default function PlanDetail() {
                                 <Calendar className="w-5 h-5 text-blue-600" />
                                 <div>
                                     <p className="text-xs uppercase font-bold text-blue-400 mb-0.5">Next Session</p>
-                                    <p className="text-sm font-semibold text-blue-900">{plan.nextSession}</p>
+                                    <p className="text-sm font-semibold text-blue-900">
+                                        {plan.next_session_at ? new Date(plan.next_session_at).toLocaleString() : 'No session scheduled'}
+                                    </p>
                                 </div>
                             </div>
 
                             <Link
-                                to={`/session/1`} // Linking to our StudySession page
+                                to={`/session/${plan.id}`} // Linking to our StudySession page
                                 className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors shadow-md hover:shadow-lg"
                             >
                                 <Play className="w-4 h-4 fill-current" />
@@ -158,10 +177,11 @@ export default function PlanDetail() {
 
                             <button
                                 onClick={handleCheckAvailability}
-                                className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                                disabled
+                                className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-400 font-medium rounded-lg cursor-not-allowed"
                             >
                                 <RefreshCw className="w-4 h-4" />
-                                Sync Schedule to Calendar
+                                Calendar sync not connected
                             </button>
                         </div>
                     </div>
@@ -172,7 +192,7 @@ export default function PlanDetail() {
             <div className="max-w-4xl mx-auto px-6 py-12">
                 <h2 className="text-xl font-bold text-gray-900 mb-6">Course Modules</h2>
                 <div className="space-y-4">
-                    {plan.modules.map((module, index) => {
+                    {modules.map((module: ModuleItem, index: number) => {
                         const Icon = statusIcons[module.status];
                         const colorClass = statusColors[module.status];
                         const isLocked = module.status === 'locked';
@@ -217,7 +237,7 @@ export default function PlanDetail() {
                                             <div className="w-full bg-gray-100 rounded-full h-1.5 mb-2">
                                                 <div
                                                     className="bg-blue-500 h-1.5 rounded-full"
-                                                    style={{ width: `${module.progress}%` }}
+                                                    style={{ width: `${module.progress ?? 0}%` }}
                                                 />
                                             </div>
                                         )}
@@ -229,7 +249,7 @@ export default function PlanDetail() {
                                                         Review Material <ArrowRight className="w-4 h-4" />
                                                     </button>
                                                 ) : (
-                                                    <Link to={`/session/${module.id}`} className="text-blue-600 hover:text-blue-700 flex items-center gap-1">
+                                                    <Link to={`/session/${plan.id}`} className="text-blue-600 hover:text-blue-700 flex items-center gap-1">
                                                         {module.status === 'in-progress' ? 'Continue' : 'Start'} Module
                                                         <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                                                     </Link>

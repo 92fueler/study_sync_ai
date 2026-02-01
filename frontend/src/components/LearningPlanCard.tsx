@@ -3,6 +3,7 @@ import { Clock, Play, Pause, Eye, CheckCircle, Trophy, Calendar, MoreVertical, C
 interface LearningPlanCardProps {
     status: 'active' | 'paused' | 'completed';
     title: string;
+    goal?: string;
     difficulty: string;
     percentage: number;
     nextSession?: string;
@@ -54,6 +55,7 @@ const categoryIcons = {
 export default function LearningPlanCard({
     status,
     title,
+    goal,
     percentage,
     nextSession,
     pausedDate,
@@ -97,7 +99,12 @@ export default function LearningPlanCard({
                         })()}
                     </div>
                 )}
-                <h3 className="text-lg font-bold text-gray-900 line-clamp-2 flex-1">{title}</h3>
+                <div className="flex-1">
+                    <h3 className="text-lg font-bold text-gray-900 line-clamp-2">{title}</h3>
+                    {goal && (
+                        <p className="text-xs text-gray-500 mt-1 line-clamp-2">{goal}</p>
+                    )}
+                </div>
             </div>
 
             {/* Progress Circle and Stats */}

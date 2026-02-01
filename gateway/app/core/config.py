@@ -43,5 +43,10 @@ class Settings:
     orchestrator_agent_url: str = field(default_factory=lambda: 
         os.getenv("ORCHESTRATOR_AGENT_URL", "http://localhost:8005"))
 
+    # Dev endpoints
+    enable_dev_endpoints: bool = field(
+        default_factory=lambda: os.getenv("ENABLE_DEV_ENDPOINTS", "false").lower() == "true"
+    )
+
 
 settings = Settings()

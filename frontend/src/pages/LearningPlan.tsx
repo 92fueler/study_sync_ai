@@ -1,198 +1,182 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
 import LearningPlanCard from '../components/LearningPlanCard';
 import ProposedPlanCard from '../components/ProposedPlanCard';
 import PlanDetailsModal from '../components/PlanDetailsModal';
+import { approveLearningPlan, createLearningPlan, listLearningPlans, listProposedLearningPlans } from '../api/client';
 
 export default function LearningPlan() {
+    const [userId, setUserId] = useState('');
     const [filter, setFilter] = useState('all');
     const [selectedPlan, setSelectedPlan] = useState<any>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [proposedPlansData, setProposedPlansData] = useState<any[]>([]);
+    const [plansData, setPlansData] = useState<any[]>([]);
+    const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+    useEffect(() => {
+        const storedUserId = localStorage.getItem('user_id');
+        if (storedUserId) {
+            setUserId(storedUserId);
+            return;
+        }
+        const tempUserId = `user_${Date.now()}`;
+        localStorage.setItem('user_id', tempUserId);
+        setUserId(tempUserId);
+    }, []);
+
+    const loadPlans = async (resolvedUserId: string) => {
+        try {
+            const [proposedResponse, plansResponse] = await Promise.all([
+                listProposedLearningPlans(resolvedUserId, { limit: 6 }),
+                listLearningPlans(resolvedUserId, { limit: 30 }),
+            ]);
+            setProposedPlansData(proposedResponse.items || []);
+            setPlansData(plansResponse.items || []);
+        } catch (error) {
+            console.error('Failed to load learning plans', error);
+        }
+    };
+
+    useEffect(() => {
+        if (!userId) return;
+        void loadPlans(userId);
+    }, [userId]);
+
+    useEffect(() => {
+        if (!statusMessage) return;
+        const timer = window.setTimeout(() => setStatusMessage(null), 3000);
+        return () => window.clearTimeout(timer);
+    }, [statusMessage]);
 
     const handlePlanClick = (plan: any, isProposed: boolean) => {
-        // Transform plan data for modal
+        const timelineFromItems = Array.isArray(plan.items)
+            ? plan.items.map((item: any, index: number) => ({
+                week: index + 1,
+                topic: item.title || `Module ${index + 1}`,
+            }))
+            : [];
+        const timelineFromDetails = Array.isArray(plan.details?.timeline)
+            ? plan.details.timeline
+            : Array.isArray(plan.details?.proposed_timeline)
+                ? plan.details.proposed_timeline
+                : [];
+        const proposedTimeline = timelineFromDetails.length ? timelineFromDetails : timelineFromItems;
         const modalPlan = {
+            id: plan.id,
             title: plan.title,
             description: plan.description,
             isProposed,
-            duration: '5 Hours',
-            timeline: isProposed ? plan.estimatedTime : 'Oct 10 - Oct 24',
+            duration: plan.details?.duration || plan.estimated_time || 'Unknown',
+            timeline: plan.details?.timeline_label || plan.estimatedTime || plan.estimated_time || 'Unknown',
             intensity: plan.difficulty || 'Moderate Pace',
-            formatBreakdown: {
-                audioSessions: 2,
-                deepDives: 3,
+            formatBreakdown: plan.details?.format_breakdown || {
+                audioSessions: 0,
+                deepDives: 0,
             },
-            proposedTimeline: [
-                { week: 1, topic: 'Core Syntax' },
-                { week: 1.5, topic: 'Type System' },
-                { week: 2, topic: 'Error Handling' },
-                { week: 2, topic: 'Project' },
-            ],
-            proposedSchedule: {
-                week: 1,
-                topic: 'Core Syntax',
-                calendarInfo: "We'll need defaults to avoid conflicts with your work meetings.",
-            },
+            proposedTimeline,
+            proposedSchedule: plan.details?.proposed_schedule,
         };
         setSelectedPlan(modalPlan);
         setIsModalOpen(true);
     };
 
-    const handleApprove = () => {
-        console.log('Plan approved!');
-        setIsModalOpen(false);
-        // Add logic to move plan from proposed to active
+    const handleApprove = async () => {
+        if (!selectedPlan?.id || !userId) return;
+        try {
+            await approveLearningPlan(selectedPlan.id, userId);
+            setIsModalOpen(false);
+            setStatusMessage('Plan approved successfully.');
+            await loadPlans(userId);
+        } catch (error) {
+            console.error('Failed to approve plan', error);
+            setStatusMessage('Plan approval failed. Please try again.');
+        }
     };
 
     const handleCustomize = () => {
         console.log('Customize plan');
-        // Add logic to open customization view
     };
 
     const handleRegenerate = () => {
         console.log('Regenerate plan');
-        // Add logic to regenerate plan
     };
 
-    const proposedPlans = [
-        {
-            title: 'Machine Learning Fundamentals',
-            description: 'Master the core concepts of ML including supervised learning, neural networks, and model evaluation techniques.',
-            estimatedTime: '6 weeks',
-            moduleCount: 14,
-            difficulty: 'Intermediate' as const,
-            category: 'TECH',
-            categoryColor: 'purple' as const,
-        },
-        {
-            title: 'Ancient Greek Philosophy',
-            description: 'Explore the foundational ideas of Socrates, Plato, and Aristotle that shaped Western thought.',
-            estimatedTime: '4 weeks',
-            moduleCount: 10,
-            difficulty: 'Advanced' as const,
-            category: 'HUMANITIES',
-            categoryColor: 'orange' as const,
-        },
-        {
-            title: 'Organic Chemistry Basics',
-            description: 'Learn the fundamentals of carbon compounds, reaction mechanisms, and molecular structures.',
-            estimatedTime: '8 weeks',
-            moduleCount: 16,
-            difficulty: 'Intermediate' as const,
-            category: 'SCIENCE',
-            categoryColor: 'blue' as const,
-        },
-        {
-            title: 'Japanese Language for Beginners',
-            description: 'Start your journey with hiragana, katakana, basic grammar, and everyday conversational phrases.',
-            estimatedTime: '12 weeks',
-            moduleCount: 24,
-            difficulty: 'Beginner' as const,
-            category: 'LANGUAGE',
-            categoryColor: 'green' as const,
-        },
-    ];
+    const handleCreatePlan = async () => {
+        if (!userId) return;
+        try {
+            const response = await createLearningPlan({
+                user_id: userId,
+                title: 'New Learning Plan',
+                description: 'Generated from plan page',
+                status: 'active',
+                difficulty: 'Intermediate',
+                category: 'TECH',
+                category_color: 'blue',
+                estimated_time: '4 weeks',
+                module_count: 6,
+                details: { source: 'plan-page' },
+            });
+            const plan = response?.plan || response;
+            if (plan) {
+                await loadPlans(userId);
+            }
+            setStatusMessage('Plan created successfully.');
+        } catch (error) {
+            console.error('Failed to create plan', error);
+            setStatusMessage('Plan creation failed. Please try again.');
+        }
+    };
 
-    const allPlans = [
-        {
-            status: 'active' as const,
-            category: 'SCIENCE',
-            categoryColor: 'blue' as const,
-            title: 'Introduction to Neuroscience',
-            difficulty: 'Intermediate',
-            percentage: 78,
-            module: 'Synaptic Transmission & Plasticity',
-            timeRemaining: '4h 30m left',
-            totalModules: 12,
-            completedModules: 9,
-            nextSession: 'Tomorrow, 3:00 PM',
-        },
-        {
-            status: 'active' as const,
-            category: 'HUMANITIES',
-            categoryColor: 'orange' as const,
-            title: 'Modern European History',
-            difficulty: 'Advanced',
-            percentage: 34,
-            module: 'The Industrial Revolution',
-            timeRemaining: '12h left',
-            totalModules: 15,
-            completedModules: 5,
-            nextSession: 'Today, 6:00 PM',
-        },
-        {
-            status: 'active' as const,
-            category: 'TECH',
-            categoryColor: 'purple' as const,
-            title: 'Python for Data Science',
-            difficulty: 'Beginner',
-            percentage: 12,
-            module: 'Pandas & NumPy Basics',
-            timeRemaining: '28h left',
-            totalModules: 10,
-            completedModules: 1,
-            nextSession: 'Friday, 10:00 AM',
-        },
-        {
-            status: 'paused' as const,
-            category: 'SCIENCE',
-            categoryColor: 'blue' as const,
-            title: 'Quantum Mechanics Fundamentals',
-            difficulty: 'Advanced',
-            percentage: 45,
-            module: 'Wave-Particle Duality',
-            totalModules: 16,
-            completedModules: 7,
-            pausedDate: '2 weeks ago',
-        },
-        {
-            status: 'paused' as const,
-            category: 'LANGUAGE',
-            categoryColor: 'green' as const,
-            title: 'Spanish Language Basics',
-            difficulty: 'Beginner',
-            percentage: 23,
-            module: 'Present Tense Verbs',
-            totalModules: 20,
-            completedModules: 4,
-            pausedDate: '1 month ago',
-        },
-        {
-            status: 'completed' as const,
-            category: 'TECH',
-            categoryColor: 'purple' as const,
-            title: 'Introduction to React',
-            difficulty: 'Intermediate',
-            percentage: 100,
-            module: 'Final Project Completed',
-            totalModules: 12,
-            completedModules: 12,
-            achievement: 'Mastery Verified - Completed on Oct 12',
-        },
-        {
-            status: 'completed' as const,
-            category: 'HUMANITIES',
-            categoryColor: 'orange' as const,
-            title: 'World War II History',
-            difficulty: 'Intermediate',
-            percentage: 100,
-            module: 'Post-War Reconstruction',
-            totalModules: 10,
-            completedModules: 10,
-            achievement: 'Certificate Earned - Completed on Sep 28',
-        },
-    ];
+    const normalizeProposedPlan = (plan: any) => ({
+        id: plan.id,
+        title: plan.title || 'Untitled Plan',
+        description: plan.description || 'No description provided.',
+        estimatedTime: plan.estimated_time || '4 weeks',
+        moduleCount: plan.module_count || 8,
+        difficulty: (plan.difficulty || 'Intermediate') as 'Beginner' | 'Intermediate' | 'Advanced',
+        category: plan.category || 'TECH',
+        categoryColor: plan.category_color || 'blue',
+    });
+
+    const normalizePlan = (plan: any) => {
+        const statusMap: Record<string, 'active' | 'paused' | 'completed'> = {
+            active: 'active',
+            paused: 'paused',
+            completed: 'completed',
+        };
+        return {
+            id: plan.id,
+            status: statusMap[plan.status] || 'active',
+            category: plan.category || 'TECH',
+            categoryColor: plan.category_color || 'blue',
+            title: plan.title || 'Untitled Plan',
+            goal: plan.goal || undefined,
+            difficulty: plan.difficulty || 'Intermediate',
+            percentage: plan.progress_percent ?? 0,
+            module: plan.details?.current_module || plan.details?.module || undefined,
+            timeRemaining: plan.estimated_time || undefined,
+            totalModules: plan.total_modules || plan.module_count || 0,
+            completedModules: plan.completed_modules || 0,
+            nextSession: plan.next_session_at
+                ? new Date(plan.next_session_at).toLocaleString()
+                : undefined,
+        };
+    };
+
+    const resolvedProposedPlans = proposedPlansData.map(normalizeProposedPlan);
+    const resolvedPlans = plansData.map(normalizePlan);
 
     const filteredPlans = filter === 'all'
-        ? allPlans
-        : allPlans.filter(plan => plan.status === filter);
+        ? resolvedPlans
+        : resolvedPlans.filter(plan => plan.status === filter);
 
     const statusCounts = {
-        all: allPlans.length,
-        active: allPlans.filter(p => p.status === 'active').length,
-        paused: allPlans.filter(p => p.status === 'paused').length,
-        completed: allPlans.filter(p => p.status === 'completed').length,
+        all: resolvedPlans.length,
+        active: resolvedPlans.filter(p => p.status === 'active').length,
+        paused: resolvedPlans.filter(p => p.status === 'paused').length,
+        completed: resolvedPlans.filter(p => p.status === 'completed').length,
     };
 
     return (
@@ -207,14 +191,22 @@ export default function LearningPlan() {
                     </p>
                 </div>
 
-                <button className="flex items-center gap-2 px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <button
+                    onClick={handleCreatePlan}
+                    className="flex items-center gap-2 px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
                     <Plus className="w-5 h-5" />
                     Create New Plan
                 </button>
             </div>
 
-            {/* Proposed Plans Carousel */}
-            {proposedPlans.length > 0 && (
+            {statusMessage && (
+                <div className="mb-6 rounded-md bg-blue-50 text-blue-700 text-sm px-4 py-2">
+                    {statusMessage}
+                </div>
+            )}
+
+            {resolvedProposedPlans.length > 0 && (
                 <div className="mb-10">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-semibold text-gray-900">New Study Plans Designed for You</h2>
@@ -230,13 +222,16 @@ export default function LearningPlan() {
 
                     <div className="overflow-x-auto pb-4 -mx-6 px-6 scrollbar-hide">
                         <div className="flex gap-4">
-                            {proposedPlans.map((plan, index) => (
-                                <ProposedPlanCard
-                                    key={index}
-                                    {...plan}
-                                    onDetailsClick={() => handlePlanClick(plan, true)}
-                                />
-                            ))}
+                            {resolvedProposedPlans.map((plan, index) => {
+                                const planId = (plan as { id?: string }).id;
+                                return (
+                                    <ProposedPlanCard
+                                        key={planId || index}
+                                        {...plan}
+                                        onDetailsClick={() => handlePlanClick(plan, true)}
+                                    />
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -290,21 +285,26 @@ export default function LearningPlan() {
                     <p className="text-gray-600 mb-6">
                         Create your first learning plan to get started
                     </p>
-                    <button className="px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                    <button
+                        onClick={handleCreatePlan}
+                        className="px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    >
                         Create Plan
                     </button>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredPlans.map((plan, index) => (
-                        <Link key={index} to={`/plans/${index + 1}`}>
-                            <LearningPlanCard {...plan} />
-                        </Link>
-                    ))}
+                    {filteredPlans.map((plan, index) => {
+                        const planId = (plan as { id?: string }).id;
+                        return (
+                            <Link key={planId || index} to={`/plans/${planId || index + 1}`}>
+                                <LearningPlanCard {...plan} />
+                            </Link>
+                        );
+                    })}
                 </div>
             )}
 
-            {/* Plan Details Modal */}
             {selectedPlan && (
                 <PlanDetailsModal
                     isOpen={isModalOpen}
