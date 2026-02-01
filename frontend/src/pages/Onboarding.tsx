@@ -54,6 +54,17 @@ export default function Onboarding() {
         void loadSettings(resolved);
     }, []);
 
+    useEffect(() => {
+        if (!userId) return;
+        const handler = () => {
+            void loadSettings(userId);
+        };
+        window.addEventListener('notifications:ready', handler);
+        return () => {
+            window.removeEventListener('notifications:ready', handler);
+        };
+    }, [userId]);
+
     const toggleFormat = (format: string) => {
         setSelectedFormats(prev =>
             prev.includes(format)

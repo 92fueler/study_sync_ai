@@ -72,6 +72,24 @@ export default function PlanDetail() {
         void loadPlan();
     }, [id, userId]);
 
+    useEffect(() => {
+        if (!id || !userId) return;
+        const handler = () => {
+            void (async () => {
+                try {
+                    const response = await getLearningPlan(id, userId);
+                    setPlan(response.plan || null);
+                } catch (error) {
+                    console.error('Failed to refresh plan details', error);
+                }
+            })();
+        };
+        window.addEventListener('notifications:ready', handler);
+        return () => {
+            window.removeEventListener('notifications:ready', handler);
+        };
+    }, [id, userId]);
+
     const handleDifficultyUpdate = async (choice: 'easier' | 'ok' | 'harder') => {
         if (!plan || !userId) return;
         setDifficultyChoice(choice);

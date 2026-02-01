@@ -45,6 +45,17 @@ export default function LearningPlan() {
     }, [userId]);
 
     useEffect(() => {
+        if (!userId) return;
+        const handler = () => {
+            void loadPlans(userId);
+        };
+        window.addEventListener('notifications:ready', handler);
+        return () => {
+            window.removeEventListener('notifications:ready', handler);
+        };
+    }, [userId]);
+
+    useEffect(() => {
         if (!statusMessage) return;
         const timer = window.setTimeout(() => setStatusMessage(null), 3000);
         return () => window.clearTimeout(timer);
