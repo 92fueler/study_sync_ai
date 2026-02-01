@@ -17,6 +17,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const [unreadCount, setUnreadCount] = useState(0);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
     const notificationsStreamRef = useRef<EventSource | null>(null);
+    const [toastQueue, setToastQueue] = useState<any[]>([]);
+    const toastTimerRef = useRef<number | null>(null);
 
     const isActive = (path: string) => location.pathname === path;
 
@@ -154,7 +156,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 if (incoming.length) {
                     setNotifications((prev) => {
                         const seen = new Set(prev.map((item: any) => item.id));
-                        const merged = [...incoming.filter((item: any) => !seen.has(item.id)), ...prev];
+                        const newItems = incoming.filter((item: any) => !seen.has(item.id));
+                        if (newItems.length) {
+                            setToastQueue((prevQueue) => [...newItems, ...prevQueue].slice(0, 3));
+                            if (toastTimerRef.current) {
+                                window.clearTimeout(toastTimerRef.current);
+                            }
+                            toastTimerRef.current = window.setTimeout(() => {
+                                setToastQueue([]);
+                            }, 4000);
+                        }
+                        const merged = [...newItems, ...prev];
                         return merged;
                     });
                 }
@@ -188,11 +200,37 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         return () => {
             stream.close();
             notificationsStreamRef.current = null;
+            if (toastTimerRef.current) {
+                window.clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = null;
+            }
         };
     }, [userId]);
 
     return (
         <div className="min-h-screen bg-gray-50">
+            {toastQueue.length > 0 && (
+                <div className="fixed top-20 right-6 z-[60] space-y-2">
+                    {toastQueue.map((item: any) => (
+                        <div
+                            key={item.id || item.created_at}
+                            className="bg-white border border-gray-200 shadow-lg rounded-xl px-4 py-3 w-80"
+                        >
+                            <div className="text-xs text-gray-400 uppercase font-semibold">
+                                {item.type || 'Notification'}
+                            </div>
+                            <div className="text-sm font-semibold text-gray-900 mt-1">
+                                {item.title || item.message || 'Update'}
+                            </div>
+                            {item.body && (
+                                <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                    {item.body}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
             <nav className="fixed top-0 w-full bg-white border-b border-gray-200 z-50">
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-8">
