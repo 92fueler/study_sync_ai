@@ -21,7 +21,18 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }
 
   if (!hasOnboarded) {
-    return <Navigate to="/dna" state={{ from: location }} replace />;
+    return <Navigate to="/onboarding" state={{ from: location }} replace />;
+  }
+
+  return children;
+}
+
+function RequireAuthOnly({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = localStorage.getItem('isAuthenticated');
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/signup" state={{ from: location }} replace />;
   }
 
   return children;
@@ -42,6 +53,11 @@ function App() {
                 <RequireAuth>
                   <Dashboard />
                 </RequireAuth>
+              } />
+              <Route path="/onboarding" element={
+                <RequireAuthOnly>
+                  <Onboarding />
+                </RequireAuthOnly>
               } />
               <Route path="/dna" element={<Onboarding />} />
               <Route path="/plan" element={<LearningPlan />} />

@@ -8,7 +8,7 @@ test('signup redirects to onboarding (mock auth)', async ({ page }) => {
   await page.getByLabel(/password/i).fill('password123')
   await page.getByRole('button', { name: /sign up/i }).click()
 
-  await expect(page).toHaveURL(/\/dna$/)
+  await expect(page).toHaveURL(/\/onboarding$/)
 })
 
 test('onboarding save persists settings and redirects', async ({ page }) => {

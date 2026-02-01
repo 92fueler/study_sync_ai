@@ -16,7 +16,7 @@ export default function SignUp() {
         localStorage.setItem('userName', name);
 
         // Redirect to Onboarding
-        navigate('/dna');
+        navigate('/onboarding');
     };
 
     return (
