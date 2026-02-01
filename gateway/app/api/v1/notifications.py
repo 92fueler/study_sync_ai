@@ -119,8 +119,8 @@ async def stream_notifications(user_id: str = Query(...)):
                         user_id,
                     )
                     notifications: List[Dict[str, Any]] = [_serialize_notification(dict(row)) for row in rows]
-                    if notifications:
-                        last_seen = notifications[0]["created_at"]
+                    if rows:
+                        last_seen = rows[0]["created_at"]
                     yield _sse_event(
                         "notifications",
                         {
@@ -141,7 +141,7 @@ async def stream_notifications(user_id: str = Query(...)):
                     )
                     if rows:
                         notifications = [_serialize_notification(dict(row)) for row in rows]
-                        last_seen = notifications[0]["created_at"]
+                        last_seen = rows[0]["created_at"]
                         badge_row = await fetchrow(
                             """
                             SELECT COUNT(*) AS unread_count
