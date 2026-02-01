@@ -158,7 +158,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         const seen = new Set(prev.map((item: any) => item.id));
                         const newItems = incoming.filter((item: any) => !seen.has(item.id));
                         if (newItems.length) {
-                            setToastQueue((prevQueue) => [...newItems, ...prevQueue].slice(0, 3));
+                            const now = Date.now();
+                            const recent = newItems.filter((item: any) => {
+                                const created = item?.created_at ? Date.parse(item.created_at) : NaN;
+                                return Number.isNaN(created) || now - created < 15_000;
+                            });
+                            if (recent.length) {
+                                setToastQueue((prevQueue) => [...recent, ...prevQueue].slice(0, 3));
+                            }
                             if (toastTimerRef.current) {
                                 window.clearTimeout(toastTimerRef.current);
                             }
@@ -178,10 +185,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         setUnreadCount(count);
                     }
                 } else if (incoming.length) {
-                    const unreadDelta = incoming.filter((item: any) => item?.read === false).length;
-                    if (unreadDelta > 0) {
-                        setUnreadCount((prev) => prev + unreadDelta);
-                    }
+                    const unreadCount = incoming.filter((item: any) => item?.read === false).length;
+                    setUnreadCount(unreadCount);
                 }
                 if (incoming.some((item: any) => item?.data?.status === 'ready')) {
                     window.dispatchEvent(new CustomEvent('notifications:ready'));
