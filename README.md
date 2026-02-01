@@ -2,26 +2,39 @@
 
 An autonomous "Learning Partner" that automates the entire lifecycle of self-study. Transforms raw inputs (PDFs, text files, links) into personalized study materials using AI agents.
 
-## 🚀 Quick Start
+## 🚀 Quick Setup
 
-### Development Mode (Recommended)
+**1. Environment Variables**
 
+Create a `.env` file in the project root:
 ```bash
-# Option 1: Using tmux (single terminal, split panes)
-./scripts/startup/start-fullstack-dev.sh
-
-# Option 2: Manual (two terminals)
-./scripts/startup/start-backend.sh    # Terminal 1
-./scripts/startup/start-frontend.sh   # Terminal 2
+cp .env.example .env
 ```
 
-### Start All Services (Including Agents)
+Required variables:
+- `GEMINI_API_KEY` - Google Gemini API key
+- `POSTGRES_PASSWORD` - PostgreSQL password (default: `postgres`)
+- `SUPABASE_SERVICE_KEY` - Supabase service key (optional)
 
+Frontend `.env` (auto-created if missing):
+- `VITE_API_URL` - Backend API URL (default: `http://localhost:8000/api/v1`)
+
+**2. Start everything:**
 ```bash
-# Start infrastructure and agents
-docker-compose up -d redis supabase profile-agent synthesis-agent ingestion-agent planner-agent orchestrator-agent
+./scripts/startup/start-fullstack-dev.sh
+```
 
-# Then start gateway and frontend (see above)
+**3. Stop everything:**
+```bash
+./scripts/startup/stop-all.sh
+```
+
+**Manual start (separate terminals):**
+```bash
+docker-compose up -d redis supabase
+docker-compose up -d profile-agent synthesis-agent ingestion-agent planner-agent orchestrator-agent
+./scripts/startup/start-backend.sh    # Terminal 1
+./scripts/startup/start-frontend.sh   # Terminal 2
 ```
 
 ## 📋 Prerequisites
@@ -122,80 +135,7 @@ study_sync_ai/
 - **Knowledge Bank**: Bulk file upload with drag & drop support
 - **Study Session Viewer**: Split-screen interface with media player and Mermaid diagrams
 
-## 🔧 Setup
-
-### 1. Environment Variables
-
-Create a `.env` file in the project root:
-
-```bash
-cp .env.example .env
-```
-
-Required variables:
-- `GEMINI_API_KEY` - Google Gemini API key
-- `POSTGRES_PASSWORD` - PostgreSQL password (default: `postgres`)
-- `SUPABASE_SERVICE_KEY` - Supabase service key (optional)
-
-Frontend `.env` (auto-created if missing):
-- `VITE_API_URL` - Backend API URL (default: `http://localhost:8000/api/v1`)
-
-### 2. Backend Setup
-
-```bash
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r gateway/requirements.txt
-```
-
-### 3. Frontend Setup
-
-```bash
-cd frontend
-
-# Install Node.js 24.x (using nvm)
-nvm use
-
-# Install dependencies
-npm install
-```
-
-### 4. Infrastructure
-
-Start Redis and PostgreSQL:
-
-```bash
-docker-compose up -d redis supabase
-```
-
-## 🚦 Running Services
-
-### Development Workflow
-
-1. **Start infrastructure:**
-   ```bash
-   docker-compose up -d redis supabase
-   ```
-
-2. **Start agents:**
-   ```bash
-   docker-compose up -d profile-agent synthesis-agent ingestion-agent planner-agent orchestrator-agent
-   ```
-
-3. **Start backend (gateway):**
-   ```bash
-   ./scripts/startup/start-backend.sh
-   ```
-
-4. **Start frontend:**
-   ```bash
-   ./scripts/startup/start-frontend.sh
-   ```
-
-### Access Points
+## 🚦 Access Points
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
