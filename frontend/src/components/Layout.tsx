@@ -289,7 +289,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                             <div className="text-xs text-gray-500 py-6 text-center">No notifications</div>
                         ) : (
                             <div className="space-y-2 max-h-80 overflow-y-auto">
-                                {notifications.map((item) => (
+                                {notifications.map((item) => {
+                                    const status = item?.data?.status;
+                                    return (
                                     <button
                                         key={item.id || item.created_at}
                                         className="w-full text-left rounded-lg border border-gray-100 hover:border-trust-blue/40 hover:bg-blue-50/40 transition-colors p-3"
@@ -307,13 +309,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                         <div className="text-sm font-semibold text-gray-900 mt-1">
                                             {item.title || item.message || 'Update'}
                                         </div>
+                                        {status && (
+                                            <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
+                                                <span className={`px-2 py-0.5 rounded-full border ${status === 'ready' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                                    {status}
+                                                </span>
+                                                <span>Received</span>
+                                                <span>→</span>
+                                                <span className={status === 'processing' ? 'font-semibold text-blue-700' : ''}>Generating</span>
+                                                <span>→</span>
+                                                <span className={status === 'ready' ? 'font-semibold text-green-700' : ''}>Ready</span>
+                                            </div>
+                                        )}
                                         {item.body && (
                                             <div className="text-xs text-gray-500 mt-1 line-clamp-2">
                                                 {item.body}
                                             </div>
                                         )}
                                     </button>
-                                ))}
+                                )})}
                             </div>
                         )}
                     </div>

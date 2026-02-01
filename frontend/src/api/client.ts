@@ -88,6 +88,21 @@ export const markNotificationRead = async (notificationId: string, userId: strin
   return response.data
 }
 
+export const getGoogleCalendarAuthUrl = async (userId: string) => {
+  const response = await apiClient.get(`/calendar/google/auth-url?user_id=${userId}`)
+  return response.data
+}
+
+export const syncGoogleCalendar = async (payload: {
+  user_id: string
+  time_min?: string
+  time_max?: string
+  calendar_id?: string
+}) => {
+  const response = await apiClient.post(`/calendar/google/sync`, payload)
+  return response.data
+}
+
 export const createIngestionJob = async (payload: {
   user_id: string
   name: string
@@ -190,6 +205,23 @@ export const createLearningPlan = async (payload: {
 
 export const getLearningPlan = async (planId: string, userId: string) => {
   const response = await apiClient.get(`/learning-plans/${planId}?user_id=${userId}&include_items=true`)
+  return response.data
+}
+
+export const updateLearningPlan = async (planId: string, userId: string, payload: {
+  title?: string
+  description?: string
+  goal?: string
+  status?: string
+  difficulty?: string
+  category?: string
+  category_color?: string
+  estimated_time?: string
+  module_count?: number
+  details?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+}) => {
+  const response = await apiClient.patch(`/learning-plans/${planId}?user_id=${userId}`, payload)
   return response.data
 }
 

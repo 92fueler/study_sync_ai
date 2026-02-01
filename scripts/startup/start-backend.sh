@@ -6,7 +6,7 @@ set -e
 
 cd "$(dirname "$0")/../.."
 
-echo "=== Starting Backend (Gateway) ==="
+echo "=== Starting Backend (Gateway + Agents) ==="
 
 # Check if .env exists
 if [ ! -f .env ]; then
@@ -19,6 +19,14 @@ if ! docker-compose ps redis supabase | grep -q "Up"; then
     echo "Starting infrastructure (Redis, Postgres)..."
     docker-compose up -d redis supabase
     echo "Waiting for infrastructure..."
+    sleep 3
+fi
+
+# Start agents if not running
+if ! docker-compose ps profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent | grep -q "Up"; then
+    echo "Starting agents (ingestion, profile, planner, synthesis, orchestrator)..."
+    docker-compose up -d profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent
+    echo "Waiting for agents..."
     sleep 3
 fi
 

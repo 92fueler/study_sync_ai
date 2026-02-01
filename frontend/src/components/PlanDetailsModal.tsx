@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { X, Clock, Calendar, Zap, Headphones, Video, Edit, RefreshCw, CheckCircle, ChevronDown, MonitorPlay } from 'lucide-react';
+import { getGoogleCalendarAuthUrl } from '../api/client';
 
 interface PlanDetailsModalProps {
     isOpen: boolean;
@@ -48,6 +49,8 @@ export default function PlanDetailsModal({
     const [isRegenerateMenuOpen, setIsRegenerateMenuOpen] = useState(false);
     const calendarStatus: 'idle' | 'preview' = plan.proposedSchedule?.sessions?.length ? 'preview' : 'idle';
     const canApprove = Boolean(onApprove);
+    const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
+    const [isConnecting, setIsConnecting] = useState(false);
 
     if (!isOpen) return null;
 
@@ -168,13 +171,38 @@ export default function PlanDetailsModal({
                                 </div>
                             </div>
                             <button
-                                disabled
-                                className="px-4 py-2 bg-white text-gray-400 text-sm font-bold rounded-lg shadow-sm border border-gray-200 flex items-center gap-2 cursor-not-allowed"
+                                onClick={async () => {
+                                    if (isConnecting) return;
+                                    setIsConnecting(true);
+                                    setCalendarMessage(null);
+                                    try {
+                                        const userId = localStorage.getItem('user_id') || '';
+                                        if (!userId) {
+                                            setCalendarMessage('Missing user id');
+                                            return;
+                                        }
+                                        const response = await getGoogleCalendarAuthUrl(userId);
+                                        if (response?.auth_url) {
+                                            window.location.href = response.auth_url;
+                                        } else {
+                                            setCalendarMessage('Unable to start Google auth.');
+                                        }
+                                    } catch (error) {
+                                        console.error('Google auth error', error);
+                                        setCalendarMessage('Google auth failed.');
+                                    } finally {
+                                        setIsConnecting(false);
+                                    }
+                                }}
+                                className="px-4 py-2 bg-white text-trust-blue text-sm font-bold rounded-lg shadow-sm border border-blue-100 hover:bg-blue-50 transition-colors flex items-center gap-2"
                             >
                                 <RefreshCw className="w-4 h-4" />
-                                Calendar not connected
+                                {isConnecting ? 'Connecting...' : 'Connect Google'}
                             </button>
                         </div>
+                    )}
+                    {calendarStatus === 'idle' && calendarMessage && (
+                        <div className="text-xs text-gray-500 mt-2 text-center">{calendarMessage}</div>
                     )}
 
                     {calendarStatus === 'preview' && (

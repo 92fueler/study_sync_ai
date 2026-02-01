@@ -8,9 +8,12 @@ import asyncio
 import json
 import logging
 import os
+import uuid
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
 import asyncpg
+import httpx
 
 logger = logging.getLogger(__name__)
 if not logging.getLogger().handlers:
@@ -117,14 +120,141 @@ async def _schedule_generation_async(user_id: str, job_type: str, content_id: st
             """,
             user_id, job_type, json.dumps({"content_id": content_id}) if content_id else None, priority
         )
-        result = {"status": "success", "job_id": str(row["id"]), "job_status": "QUEUED"}
-        logger.info("schedule_generation queued", extra={"user_id": user_id, "job_id": result["job_id"]})
+        job_id = str(row["id"])
+        result = {"status": "success", "job_id": job_id, "job_status": "QUEUED"}
+
+        fast_path = os.getenv("ORCHESTRATOR_FAST_PATH", "false").lower() == "true"
+        if fast_path:
+            await conn.execute(
+                """
+                UPDATE background_jobs
+                SET status = 'COMPLETED', completed_at = $1
+                WHERE id = $2
+                """,
+                datetime.now(timezone.utc),
+                job_id,
+            )
+            await conn.execute(
+                """
+                INSERT INTO notifications (user_id, channel, title, body, data)
+                VALUES ($1, 'in_app', $2, $3, $4)
+                """,
+                user_id,
+                "Materials ready",
+                f"Background job {job_type} completed.",
+                json.dumps({"job_id": job_id, "status": "ready", "job_type": job_type}),
+            )
+            result["job_status"] = "COMPLETED"
+            logger.info("schedule_generation fast-path completed", extra={"user_id": user_id, "job_id": job_id})
+            return result
+
+        # Real generation path: mark running, call synthesis, then update job.
+        await conn.execute(
+            """
+            UPDATE background_jobs
+            SET status = 'RUNNING', started_at = $1
+            WHERE id = $2
+            """,
+            datetime.now(timezone.utc),
+            job_id,
+        )
+
+        try:
+            await _run_synthesis_5min(user_id, content_id)
+            await conn.execute(
+                """
+                UPDATE background_jobs
+                SET status = 'COMPLETED', completed_at = $1
+                WHERE id = $2
+                """,
+                datetime.now(timezone.utc),
+                job_id,
+            )
+            await conn.execute(
+                """
+                INSERT INTO notifications (user_id, channel, title, body, data)
+                VALUES ($1, 'in_app', $2, $3, $4)
+                """,
+                user_id,
+                "Materials ready",
+                "Your study materials are ready.",
+                json.dumps({"job_id": job_id, "status": "ready", "job_type": job_type}),
+            )
+            result["job_status"] = "COMPLETED"
+        except Exception as exc:
+            await conn.execute(
+                """
+                UPDATE background_jobs
+                SET status = 'FAILED', completed_at = $1, error_message = $2
+                WHERE id = $3
+                """,
+                datetime.now(timezone.utc),
+                str(exc),
+                job_id,
+            )
+            await conn.execute(
+                """
+                INSERT INTO notifications (user_id, channel, title, body, data)
+                VALUES ($1, 'in_app', $2, $3, $4)
+                """,
+                user_id,
+                "Material generation failed",
+                "We could not generate materials for your note.",
+                json.dumps({"job_id": job_id, "status": "failed", "job_type": job_type}),
+            )
+            result["job_status"] = "FAILED"
+        logger.info("schedule_generation completed", extra={"user_id": user_id, "job_id": job_id, "status": result["job_status"]})
         return result
     except Exception as e:
         logger.exception("schedule_generation failed", extra={"user_id": user_id, "job_type": job_type})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
+
+
+async def _run_synthesis_5min(user_id: str, content_id: Optional[str]) -> None:
+    if not content_id:
+        raise ValueError("Missing content_id for synthesis")
+
+    synthesis_url = os.getenv("SYNTHESIS_AGENT_URL", "http://synthesis-agent:8003")
+    session_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"studysync:synthesis:{user_id}"))
+
+    async with httpx.AsyncClient(timeout=120) as client:
+        session_resp = await client.post(
+            f"{synthesis_url}/apps/synthesis/users/{user_id}/sessions",
+            json={"id": session_id},
+            headers={"Content-Type": "application/json"},
+        )
+        if session_resp.status_code != 200:
+            raise RuntimeError(f"Synthesis session failed: {session_resp.status_code} {session_resp.text}")
+        try:
+            session_json = session_resp.json()
+            session_id = session_json.get("id", session_id)
+        except Exception:
+            pass
+
+        request_body = {
+            "app_name": "synthesis",
+            "user_id": user_id,
+            "session_id": session_id,
+            "new_message": {
+                "role": "user",
+                "parts": [{
+                    "text": (
+                        "Generate a 5-minute summary using the generate_5min_summary tool. "
+                        f"user_id: {user_id}; content_id: {content_id}; profile_version: 1; "
+                        "style_dna: {\"tone\": \"eli5\", \"format_pref\": \"outline\", \"uses_emoji\": false, \"prefers_diagrams\": true}"
+                    )
+                }]
+            }
+        }
+        run_resp = await client.post(
+            f"{synthesis_url}/run_sse",
+            json=request_body,
+            headers={"Content-Type": "application/json"},
+        )
+        if run_resp.status_code != 200:
+            raise RuntimeError(f"Synthesis run failed: {run_resp.status_code} {run_resp.text}")
 
 
 def get_job_status(job_id: str) -> Dict[str, Any]:

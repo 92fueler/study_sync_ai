@@ -87,7 +87,9 @@ async def test_create_note_with_tag_objects():
         "created_at": None,
     }
 
-    with patch('app.api.v1.notes.fetchrow', AsyncMock(return_value=row)):
+    with patch('app.api.v1.notes.fetchrow', AsyncMock(side_effect=[row, {"id": "c1"}, {"id": "m1"}, {"id": "n1"}])), \
+            patch('app.api.v1.notes.get_a2a_client', AsyncMock()) as mocked_client:
+        mocked_client.return_value.run_agent = AsyncMock()
         result = await create_note(payload)
 
     assert result["tags"][0]["label"] == "Notes"
@@ -118,7 +120,9 @@ async def test_create_note_with_string_tags():
         "created_at": None,
     }
 
-    with patch('app.api.v1.notes.fetchrow', AsyncMock(return_value=row)):
+    with patch('app.api.v1.notes.fetchrow', AsyncMock(side_effect=[row, {"id": "c1"}, {"id": "m1"}, {"id": "n1"}])), \
+            patch('app.api.v1.notes.get_a2a_client', AsyncMock()) as mocked_client:
+        mocked_client.return_value.run_agent = AsyncMock()
         result = await create_note(payload)
 
     assert result["tags"][0]["type"] == "topic"
@@ -136,3 +140,30 @@ async def test_list_recent_notes():
         result = await list_recent_notes(user_id="user-1", limit=1)
 
     assert result["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_update_note_triggers_pipeline():
+    from app.api.v1.notes import update_note, NoteUpdate
+
+    payload = NoteUpdate(title="Updated title")
+    row = {
+        "id": "n9",
+        "user_id": "user-1",
+        "note_type": "text",
+        "title": "Updated title",
+        "description": "Details",
+        "tags": [{"type": "topic", "label": "AI"}],
+        "author": "AI",
+        "topic": None,
+        "thumbnail_url": None,
+        "source_id": None,
+        "created_at": None,
+    }
+
+    with patch('app.api.v1.notes.fetchrow', AsyncMock(side_effect=[row, {"id": "c1"}, {"id": "m1"}, {"id": "n1"}])), \
+            patch('app.api.v1.notes.get_a2a_client', AsyncMock()) as mocked_client:
+        mocked_client.return_value.run_agent = AsyncMock()
+        result = await update_note(note_id="n9", user_id="user-1", update=payload)
+
+    assert result["id"] == "n9"

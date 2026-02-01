@@ -3,20 +3,15 @@ import { Link } from 'react-router-dom';
 import { FileText, Link as LinkIcon, FileUp, Paperclip, Mic, Sparkles, ArrowRight } from 'lucide-react';
 import LearningPlanCard from '../components/LearningPlanCard';
 import LearningNoteCard from '../components/LearningNoteCard';
-import {
-    createIngestionJob,
-    createNote,
-    listLearningPlans,
-    listRecentNotes,
-    uploadFiles,
-} from '../api/client';
+import { createIngestionJob, createNote, listArtifacts, listLearningPlans, uploadFiles } from '../api/client';
 
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('raw-notes');
     const [userId, setUserId] = useState('');
     const [inputText, setInputText] = useState('');
+    const [goalText, setGoalText] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [recentNotes, setRecentNotes] = useState<any[]>([]);
+    const [recentMaterials, setRecentMaterials] = useState<any[]>([]);
     const [activePlans, setActivePlans] = useState<any[]>([]);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -54,12 +49,17 @@ export default function Dashboard() {
 
     const loadData = async (resolvedUserId: string) => {
         try {
-            const [notesResponse, plansResponse] = await Promise.all([
-                listRecentNotes(resolvedUserId, 6),
+            const [plansResponse] = await Promise.all([
                 listLearningPlans(resolvedUserId, { limit: 3 }),
             ]);
-            setRecentNotes(notesResponse.items || []);
             setActivePlans(plansResponse.items || []);
+            try {
+                const materialsResponse = await listArtifacts(resolvedUserId);
+                setRecentMaterials(materialsResponse.items || []);
+            } catch (error) {
+                console.error('Failed to load materials', error);
+                setRecentMaterials([]);
+            }
         } catch (error) {
             console.error('Failed to load dashboard data', error);
         }
@@ -81,34 +81,6 @@ export default function Dashboard() {
         if (diffHours < 24) return `${diffHours}h ago`;
         const diffDays = Math.floor(diffHours / 24);
         return `${diffDays}d ago`;
-    };
-
-    const normalizeNote = (note: any) => {
-        const rawTags = Array.isArray(note.tags) ? note.tags : [];
-        const tags = rawTags.length
-            ? rawTags
-            : [
-                { type: 'format', label: (note.note_type || 'Notes').toString().toUpperCase() },
-                ...(note.topic ? [{ type: 'topic', label: note.topic }] : []),
-            ];
-        const typeMap: Record<string, 'pdf' | 'video' | 'audio' | 'image'> = {
-            pdf: 'pdf',
-            video: 'video',
-            audio: 'audio',
-            image: 'image',
-            url: 'pdf',
-            text: 'pdf',
-        };
-        return {
-            id: note.id || note.note_id || note.uuid || null,
-            type: typeMap[note.note_type] || 'pdf',
-            title: note.title || 'Untitled Note',
-            description: note.description || 'No description provided.',
-            tags,
-            author: note.author || 'AI Summary',
-            timestamp: formatTimestamp(note.created_at),
-            thumbnail: note.thumbnail_url || undefined,
-        };
     };
 
     const normalizePlan = (plan: any) => {
@@ -164,9 +136,26 @@ export default function Dashboard() {
                         });
                     })
                 );
+                showStatus('Files uploaded. Generating notes now.');
+                await Promise.all(
+                    response.results.map((item: any) => {
+                        return createNote({
+                            user_id: userId,
+                            note_type: 'pdf',
+                            title: item.filename || 'Uploaded File',
+                            description: 'Uploaded from dashboard.',
+                            tags: [
+                                { type: 'format', label: 'PDF' },
+                                { type: 'topic', label: 'Upload' },
+                            ],
+                            author: 'User',
+                            source_id: item.content_id || item.task_id,
+                        });
+                    })
+                );
             }
-            showStatus('Files uploaded successfully.');
             await loadData(userId);
+            showStatus('Upload processed. Notes ready.');
         } catch (error) {
             console.error('Upload failed', error);
             showStatus('Upload failed. Please try again.');
@@ -190,9 +179,26 @@ export default function Dashboard() {
                         metadata: { source: 'audio-upload', task_id: item.task_id, content_id: item.content_id },
                     }))
                 );
+                showStatus('Audio uploaded. Generating notes now.');
+                await Promise.all(
+                    response.results.map((item: any) => {
+                        return createNote({
+                            user_id: userId,
+                            note_type: 'audio',
+                            title: item.filename || 'Audio Upload',
+                            description: 'Uploaded audio from dashboard.',
+                            tags: [
+                                { type: 'format', label: 'AUDIO' },
+                                { type: 'topic', label: 'Upload' },
+                            ],
+                            author: 'User',
+                            source_id: item.content_id || item.task_id,
+                        });
+                    })
+                );
             }
-            showStatus('Audio uploaded successfully.');
             await loadData(userId);
+            showStatus('Audio processed. Notes ready.');
         } catch (error) {
             console.error('Audio upload failed', error);
             showStatus('Audio upload failed. Please try again.');
@@ -220,6 +226,7 @@ export default function Dashboard() {
                 tags: [
                     { type: 'format', label: activeTab === 'url-input' ? 'URL' : 'Notes' },
                     { type: 'topic', label: 'Dashboard' },
+                    ...(goalText.trim() ? [{ type: 'goal', label: goalText.trim() }] : []),
                 ],
                 author: 'AI Summary',
             });
@@ -231,6 +238,7 @@ export default function Dashboard() {
             }
             showStatus('Saved. Generating structure now.');
             setInputText('');
+            setGoalText('');
         } catch (error) {
             console.error('Generate structure failed', error);
             showStatus('Save failed. Please try again.');
@@ -292,6 +300,12 @@ export default function Dashboard() {
                         value={inputText}
                         onChange={(e) => setInputText(e.target.value)}
                     />
+                    <input
+                        className="w-full mt-3 px-4 py-2 text-sm text-gray-600 placeholder-gray-400 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-trust-blue"
+                        placeholder="Optional goal for this note (e.g., 'Prep for midterm')"
+                        value={goalText}
+                        onChange={(e) => setGoalText(e.target.value)}
+                    />
 
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                         <div className="flex items-center gap-3">
@@ -339,35 +353,7 @@ export default function Dashboard() {
 
             <div className="mb-12">
                 <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-semibold text-gray-900">Active Learning Plans</h2>
-                    <Link
-                        to="/plan"
-                        className="flex items-center gap-1 text-sm font-medium text-trust-blue hover:text-blue-700 transition-colors"
-                    >
-                        View All
-                        <ArrowRight className="w-4 h-4" />
-                    </Link>
-                </div>
-
-                {activePlans.length === 0 ? (
-                    <div className="text-sm text-gray-500">No active plans yet.</div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {activePlans.map(normalizePlan).map((plan, index) => {
-                            const planId = (plan as { id?: string }).id;
-                            return (
-                                <Link key={planId || index} to={`/plans/${planId || index + 1}`}>
-                                    <LearningPlanCard {...plan} />
-                                </Link>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
-
-            <div className="mb-8">
-                <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-semibold text-gray-900">Recent Learning Notes</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900">Latest Materials</h2>
                     <Link
                         to="/bank"
                         className="flex items-center gap-1 text-sm font-medium text-trust-blue hover:text-blue-700 transition-colors"
@@ -377,18 +363,26 @@ export default function Dashboard() {
                     </Link>
                 </div>
 
-                {recentNotes.length === 0 ? (
-                    <div className="text-sm text-gray-500">No notes yet.</div>
+                {recentMaterials.length === 0 ? (
+                    <div className="text-sm text-gray-500">No generated materials yet.</div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {recentNotes.map(normalizeNote).map((note, index) => (
-                            <Link key={`${note.id ?? note.title}-${index}`} to={`/notes/${note.id ?? index + 1}`} className="block">
-                                <LearningNoteCard {...note} />
+                        {recentMaterials.slice(0, 3).map((artifact: any) => (
+                            <Link key={artifact.id} to={`/materials/${artifact.id}`} className="block">
+                                <LearningNoteCard
+                                    type="pdf"
+                                    title={artifact.title || `Material (${artifact.artifact_type})`}
+                                    description={`Generated on ${new Date(artifact.created_at).toLocaleDateString()}`}
+                                    tags={[{ type: 'format', label: 'AI MATERIAL' }]}
+                                    author="AI"
+                                    timestamp={new Date(artifact.created_at).toLocaleTimeString()}
+                                />
                             </Link>
                         ))}
                     </div>
                 )}
             </div>
+
         </div>
     );
 }
