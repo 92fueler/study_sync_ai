@@ -13,9 +13,12 @@ export default function Dashboard() {
     const [recentMaterials, setRecentMaterials] = useState<any[]>([]);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+    const [processingLabel, setProcessingLabel] = useState<string | null>(null);
+    const [processingProgress, setProcessingProgress] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
     const messageTimerRef = useRef<number | null>(null);
+    const processingTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         const storedUserId = localStorage.getItem('user_id');
@@ -33,6 +36,9 @@ export default function Dashboard() {
             if (messageTimerRef.current) {
                 window.clearTimeout(messageTimerRef.current);
             }
+            if (processingTimerRef.current) {
+                window.clearTimeout(processingTimerRef.current);
+            }
         };
     }, []);
 
@@ -44,6 +50,23 @@ export default function Dashboard() {
         messageTimerRef.current = window.setTimeout(() => {
             setStatusMessage(null);
         }, 3000);
+    };
+
+    const startProcessing = (label: string, progress = 90) => {
+        setProcessingLabel(label);
+        setProcessingProgress(progress);
+    };
+
+    const finishProcessing = () => {
+        setProcessingLabel('Ready');
+        setProcessingProgress(100);
+        if (processingTimerRef.current) {
+            window.clearTimeout(processingTimerRef.current);
+        }
+        processingTimerRef.current = window.setTimeout(() => {
+            setProcessingLabel(null);
+            setProcessingProgress(null);
+        }, 2000);
     };
 
     const loadData = async (resolvedUserId: string) => {
@@ -65,6 +88,7 @@ export default function Dashboard() {
         if (!userId) return;
         const handler = () => {
             void loadData(userId);
+            finishProcessing();
         };
         window.addEventListener('notifications:ready', handler);
         return () => {
@@ -85,6 +109,8 @@ export default function Dashboard() {
         if (!files.length || !userId) return;
         try {
             setUploadProgress(0);
+            setProcessingLabel('Uploading');
+            setProcessingProgress(0);
             const response = await uploadFiles(userId, files, (percent) => setUploadProgress(percent));
             if (response?.results) {
                 await Promise.all(
@@ -122,6 +148,7 @@ export default function Dashboard() {
                     })
                 );
             }
+            startProcessing('Processing', 90);
             await loadData(userId);
             showStatus('Upload processed. Notes ready.');
         } catch (error) {
@@ -138,6 +165,8 @@ export default function Dashboard() {
         if (!files.length || !userId) return;
         try {
             setUploadProgress(0);
+            setProcessingLabel('Uploading');
+            setProcessingProgress(0);
             const response = await uploadFiles(userId, files, (percent) => setUploadProgress(percent));
             if (response?.results) {
                 await Promise.all(
@@ -168,6 +197,7 @@ export default function Dashboard() {
                     })
                 );
             }
+            startProcessing('Processing', 90);
             await loadData(userId);
             showStatus('Audio processed. Notes ready.');
         } catch (error) {
@@ -182,6 +212,7 @@ export default function Dashboard() {
     const handleGenerateStructure = async () => {
         if (!inputText.trim() || !userId) return;
         setIsSubmitting(true);
+        startProcessing('Processing', 90);
         try {
             const ingestion = await createIngestionJob({
                 user_id: userId,
@@ -321,16 +352,16 @@ export default function Dashboard() {
                             {isSubmitting ? 'Generating...' : 'Generate Structure'}
                         </button>
                     </div>
-                    {uploadProgress !== null && (
+                    {(uploadProgress !== null || processingProgress !== null) && (
                         <div className="mt-3">
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                <span>Uploading</span>
-                                <span>{uploadProgress}%</span>
+                                <span>{processingLabel || 'Uploading'}</span>
+                                <span>{Math.round(processingProgress ?? uploadProgress ?? 0)}%</span>
                             </div>
                             <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-trust-blue transition-all"
-                                    style={{ width: `${uploadProgress}%` }}
+                                    style={{ width: `${processingProgress ?? uploadProgress ?? 0}%` }}
                                 />
                             </div>
                         </div>
