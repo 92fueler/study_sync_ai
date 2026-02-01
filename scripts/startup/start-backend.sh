@@ -22,10 +22,10 @@ if ! docker-compose ps redis supabase | grep -q "Up"; then
     sleep 3
 fi
 
-# Start agents if not running
-if ! docker-compose ps profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent | grep -q "Up"; then
-    echo "Starting agents (ingestion, profile, planner, synthesis, orchestrator)..."
-    docker-compose up -d profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent
+# Start agents/workers if not running
+if ! docker-compose ps profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent notification-worker generation-worker priority-worker | grep -q "Up"; then
+    echo "Starting agents/workers (ingestion, profile, planner, synthesis, orchestrator, notification, generation, priority)..."
+    docker-compose up -d profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent notification-worker generation-worker priority-worker
     echo "Waiting for agents..."
     sleep 3
 fi
