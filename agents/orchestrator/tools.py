@@ -6,14 +6,21 @@ ADK tools for background job management and notifications.
 
 import asyncio
 import json
+import logging
 import os
 from typing import Dict, Any, Optional
 
 import asyncpg
 
+logger = logging.getLogger(__name__)
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=os.getenv("AGENT_LOG_LEVEL", "INFO"))
+
 
 async def _get_db_connection():
-    return await asyncpg.connect(os.getenv("SUPABASE_URL", ""))
+    dsn = os.getenv("SUPABASE_URL", "")
+    logger.debug("Connecting to DB for orchestrator tools")
+    return await asyncpg.connect(dsn)
 
 
 def _run_async(coro):
@@ -41,6 +48,7 @@ def detect_changes(user_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status, new_content list, profile_updated flag, pending_jobs count
     """
+    logger.info("detect_changes called", extra={"user_id": user_id})
     return _run_async(_detect_changes_async(user_id))
 
 
@@ -59,13 +67,16 @@ async def _detect_changes_async(user_id: str) -> Dict[str, Any]:
             user_id
         )
         
-        return {
+        result = {
             "status": "success",
             "new_content": [{"content_id": str(m["content_id"]), "uploaded_at": str(m["uploaded_at"])} for m in materials],
             "profile_updated": False,
             "pending_jobs": job_count["count"] if job_count else 0
         }
+        logger.info("detect_changes completed", extra={"user_id": user_id, "new_content": len(materials)})
+        return result
     except Exception as e:
+        logger.exception("detect_changes failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -89,6 +100,7 @@ def schedule_generation(
     Returns:
         Dict with status, job_id, and initial job status
     """
+    logger.info("schedule_generation called", extra={"user_id": user_id, "job_type": job_type, "priority": priority})
     return _run_async(
         _schedule_generation_async(user_id, job_type, content_id, priority)
     )
@@ -105,8 +117,11 @@ async def _schedule_generation_async(user_id: str, job_type: str, content_id: st
             """,
             user_id, job_type, json.dumps({"content_id": content_id}) if content_id else None, priority
         )
-        return {"status": "success", "job_id": str(row["id"]), "job_status": "QUEUED"}
+        result = {"status": "success", "job_id": str(row["id"]), "job_status": "QUEUED"}
+        logger.info("schedule_generation queued", extra={"user_id": user_id, "job_id": result["job_id"]})
+        return result
     except Exception as e:
+        logger.exception("schedule_generation failed", extra={"user_id": user_id, "job_type": job_type})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -122,6 +137,7 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status and job details including job_status, attempts, timestamps
     """
+    logger.info("get_job_status called", extra={"job_id": job_id})
     return _run_async(_get_job_status_async(job_id))
 
 
@@ -131,7 +147,7 @@ async def _get_job_status_async(job_id: str) -> Dict[str, Any]:
         row = await conn.fetchrow("SELECT * FROM background_jobs WHERE id = $1", job_id)
         if not row:
             return {"status": "error", "error": "Job not found"}
-        return {
+        result = {
             "status": "success",
             "job_id": str(row["id"]),
             "job_status": row["status"],
@@ -143,7 +159,10 @@ async def _get_job_status_async(job_id: str) -> Dict[str, Any]:
             "completed_at": str(row["completed_at"]) if "completed_at" in row and row["completed_at"] else "",
             "error_message": row["error_message"] if "error_message" in row else None
         }
+        logger.info("get_job_status completed", extra={"job_id": job_id, "status": result["job_status"]})
+        return result
     except Exception as e:
+        logger.exception("get_job_status failed", extra={"job_id": job_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -160,6 +179,7 @@ def get_notifications(user_id: str, unread_only: bool = False) -> Dict[str, Any]
     Returns:
         Dict with status and list of notifications
     """
+    logger.info("get_notifications called", extra={"user_id": user_id, "unread_only": unread_only})
     return _run_async(_get_notifications_async(user_id, unread_only))
 
 
@@ -168,20 +188,29 @@ async def _get_notifications_async(user_id: str, unread_only: bool) -> Dict[str,
     try:
         if unread_only:
             rows = await conn.fetch(
-                "SELECT * FROM notifications WHERE user_id = $1 AND read = FALSE ORDER BY created_at DESC",
+                """
+                SELECT id, user_id, title, body, data, read, created_at
+                FROM notifications
+                WHERE user_id = $1 AND read = FALSE
+                ORDER BY created_at DESC
+                """,
                 user_id
             )
         else:
             rows = await conn.fetch(
-                "SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC",
+                """
+                SELECT id, user_id, title, body, data, read, created_at
+                FROM notifications
+                WHERE user_id = $1
+                ORDER BY created_at DESC
+                """,
                 user_id
             )
-        return {
+        result = {
             "status": "success",
             "notifications": [
                 {
                     "id": str(r["id"]),
-                    "channel": r["channel"],
                     "title": r["title"],
                     "body": r["body"],
                     "data": json.loads(r["data"]) if isinstance(r.get("data"), str) else r.get("data"),
@@ -191,7 +220,10 @@ async def _get_notifications_async(user_id: str, unread_only: bool) -> Dict[str,
                 for r in rows
             ]
         }
+        logger.info("get_notifications completed", extra={"user_id": user_id, "count": len(rows)})
+        return result
     except Exception as e:
+        logger.exception("get_notifications failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -207,6 +239,7 @@ def get_badge_count(user_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status and unread_count
     """
+    logger.info("get_badge_count called", extra={"user_id": user_id})
     return _run_async(_get_badge_count_async(user_id))
 
 
@@ -217,8 +250,11 @@ async def _get_badge_count_async(user_id: str) -> Dict[str, Any]:
             "SELECT COUNT(*) as count FROM notifications WHERE user_id = $1 AND read = FALSE",
             user_id
         )
-        return {"status": "success", "unread_count": row["count"] if row else 0}
+        result = {"status": "success", "unread_count": row["count"] if row else 0}
+        logger.info("get_badge_count completed", extra={"user_id": user_id, "unread_count": result["unread_count"]})
+        return result
     except Exception as e:
+        logger.exception("get_badge_count failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -234,6 +270,7 @@ def mark_notification_read(notification_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status
     """
+    logger.info("mark_notification_read called", extra={"notification_id": notification_id})
     return _run_async(_mark_read_async(notification_id))
 
 
@@ -241,8 +278,10 @@ async def _mark_read_async(notification_id: str) -> Dict[str, Any]:
     conn = await _get_db_connection()
     try:
         await conn.execute("UPDATE notifications SET read = TRUE WHERE id = $1", notification_id)
+        logger.info("mark_notification_read completed", extra={"notification_id": notification_id})
         return {"status": "success"}
     except Exception as e:
+        logger.exception("mark_notification_read failed", extra={"notification_id": notification_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -268,6 +307,7 @@ def create_notification(
     Returns:
         Dict with status and notification_id
     """
+    logger.info("create_notification called", extra={"user_id": user_id, "title": title})
     return _run_async(
         _create_notification_async(user_id, title, body, channel, data)
     )
@@ -278,16 +318,21 @@ async def _create_notification_async(
 ) -> Dict[str, Any]:
     conn = await _get_db_connection()
     try:
+        payload = dict(data or {})
+        payload.setdefault("channel", channel)
         row = await conn.fetchrow(
             """
-            INSERT INTO notifications (user_id, channel, title, body, data)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO notifications (user_id, title, body, data)
+            VALUES ($1, $2, $3, $4)
             RETURNING id
             """,
-            user_id, channel, title, body, json.dumps(data) if data else None
+            user_id, title, body, json.dumps(payload) if payload else None
         )
-        return {"status": "success", "notification_id": str(row["id"])}
+        result = {"status": "success", "notification_id": str(row["id"])}
+        logger.info("create_notification completed", extra={"user_id": user_id, "notification_id": result["notification_id"]})
+        return result
     except Exception as e:
+        logger.exception("create_notification failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()

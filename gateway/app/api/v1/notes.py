@@ -4,7 +4,9 @@ Learning Notes API Endpoints
 Supports dashboard + knowledge bank cards.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+
+import json
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -19,7 +21,7 @@ class NoteCreate(BaseModel):
     note_type: str
     title: str
     description: Optional[str] = None
-    tags: Optional[List[str]] = None
+    tags: Optional[List[Union[Dict[str, str], str]]] = None
     author: Optional[str] = None
     topic: Optional[str] = None
     thumbnail_url: Optional[str] = None
@@ -30,6 +32,11 @@ def _note_row_to_dict(row) -> Dict[str, Any]:
     note = dict(row)
     note["id"] = str(note["id"])
     note["created_at"] = note.get("created_at")
+    if isinstance(note.get("tags"), str):
+        try:
+            note["tags"] = json.loads(note["tags"])
+        except Exception:
+            pass
     return note
 
 
@@ -108,6 +115,23 @@ async def list_note_topics(user_id: str = Query(...)):
     return {"user_id": user_id, "items": topics}
 
 
+@router.get("/{note_id}")
+async def get_note(note_id: str, user_id: str = Query(...)):
+    """Get a single note by id."""
+    query = "SELECT * FROM learning_notes WHERE id = $1 AND user_id = $2"
+    try:
+        row = await fetchrow(query, note_id, user_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}")
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    return _note_row_to_dict(row)
+
+
 @router.post("")
 async def create_note(request: NoteCreate):
     """Create a learning note (for manual curation or seed data)."""
@@ -118,13 +142,22 @@ async def create_note(request: NoteCreate):
         RETURNING *
     """
     try:
+        normalized_tags = None
+        if request.tags is not None:
+            normalized_tags = []
+            for tag in request.tags:
+                if isinstance(tag, dict):
+                    normalized_tags.append(tag)
+                else:
+                    normalized_tags.append({"type": "topic", "label": str(tag)})
+        tags_payload = json.dumps(normalized_tags) if normalized_tags is not None else None
         row = await fetchrow(
             query,
             request.user_id,
             request.note_type,
             request.title,
             request.description,
-            request.tags,
+            tags_payload,
             request.author,
             request.topic,
             request.thumbnail_url,
@@ -132,7 +165,7 @@ async def create_note(request: NoteCreate):
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Database error")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}")
 
     return _note_row_to_dict(row)

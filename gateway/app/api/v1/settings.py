@@ -6,6 +6,8 @@ User-configurable preferences stored directly in DB.
 
 from typing import Any, Dict, Optional
 
+import json
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -25,6 +27,12 @@ def _settings_row_to_dict(row) -> Dict[str, Any]:
     settings = dict(row)
     settings["created_at"] = settings.get("created_at")
     settings["updated_at"] = settings.get("updated_at")
+    for field in ("notifications", "study_preferences"):
+        if isinstance(settings.get(field), str):
+            try:
+                settings[field] = json.loads(settings[field])
+            except Exception:
+                pass
     return settings
 
 
@@ -71,6 +79,8 @@ async def update_settings(user_id: str, update: SettingsUpdate):
         params = []
         idx = 1
         for field, value in update_values.items():
+            if field in {"notifications", "study_preferences"} and value is not None:
+                value = json.dumps(value)
             updates.append(f"{field} = ${idx}")
             params.append(value)
             idx += 1
@@ -101,9 +111,9 @@ async def update_settings(user_id: str, update: SettingsUpdate):
             query,
             user_id,
             update_values.get("theme"),
-            update_values.get("notifications"),
+            json.dumps(update_values.get("notifications")) if update_values.get("notifications") is not None else None,
             update_values.get("timezone"),
-            update_values.get("study_preferences"),
+            json.dumps(update_values.get("study_preferences")) if update_values.get("study_preferences") is not None else None,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))

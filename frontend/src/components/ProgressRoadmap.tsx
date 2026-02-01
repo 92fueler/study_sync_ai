@@ -7,14 +7,19 @@ interface Milestone {
     isActive?: boolean;
 }
 
-export default function ProgressRoadmap() {
-    const milestones: Milestone[] = [
-        { id: '1', title: 'Core Concepts', isCompleted: true },
-        { id: '2', title: 'Math Representation', isCompleted: true },
-        { id: '3', title: 'Implications', isCompleted: false, isActive: true },
-        { id: '4', title: 'Practice Problems', isCompleted: false },
-        { id: '5', title: 'Summary', isCompleted: false },
-    ];
+interface ProgressRoadmapProps {
+    milestones?: Milestone[];
+}
+
+export default function ProgressRoadmap({ milestones = [] }: ProgressRoadmapProps) {
+    if (!milestones.length) {
+        return (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                <h3 className="font-semibold text-gray-900 mb-2">Session Roadmap</h3>
+                <p className="text-sm text-gray-500">No roadmap data available yet.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">

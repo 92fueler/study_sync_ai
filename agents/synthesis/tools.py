@@ -6,12 +6,16 @@ ADK tools for generating personalized learning artifacts.
 
 import asyncio
 import json
+import logging
 import os
 from typing import Dict, Any, List, Optional
 
 import asyncpg
 from google import genai
 
+logger = logging.getLogger(__name__)
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=os.getenv("AGENT_LOG_LEVEL", "INFO"))
 
 # Lazy-initialized Gemini client
 _client = None
@@ -28,7 +32,9 @@ def _get_genai_client():
 
 
 async def _get_db_connection():
-    return await asyncpg.connect(os.getenv("SUPABASE_URL", ""))
+    dsn = os.getenv("SUPABASE_URL", "")
+    logger.debug("Connecting to DB for synthesis tools")
+    return await asyncpg.connect(dsn)
 
 
 def _run_async(coro):
@@ -102,6 +108,7 @@ def generate_artifact(
     Returns:
         Dict with status, artifact_id, content, content_5min, estimated_minutes
     """
+    logger.info("generate_artifact called", extra={"user_id": user_id, "content_ids": len(content_ids), "minutes": time_available_minutes})
     return _run_async(
         _generate_artifact_async(user_id, content_ids, profile_version, style_dna, time_available_minutes)
     )
@@ -127,13 +134,15 @@ async def _generate_artifact_async(
         )
         
         if cached:
-            return {
+            result = {
                 "status": "success",
                 "artifact_id": str(cached["id"]),
                 "content": cached["content"],
                 "estimated_minutes": cached.get("estimated_minutes", time_available_minutes),
                 "cached": True
             }
+            logger.info("generate_artifact cache hit", extra={"user_id": user_id, "artifact_id": result["artifact_id"]})
+            return result
         
         # Get source content
         source_texts = []
@@ -143,6 +152,7 @@ async def _generate_artifact_async(
                 source_texts.append(row["raw_text"])
         
         if not source_texts:
+            logger.info("generate_artifact no source content", extra={"user_id": user_id})
             return {"status": "error", "error": "No source content found"}
         
         combined = "\n\n---\n\n".join(source_texts)
@@ -203,7 +213,7 @@ Source:
             user_id, content_ids, profile_version, five_content
         )
         
-        return {
+        result = {
             "status": "success",
             "artifact_id": artifact_id,
             "content": full_content,
@@ -211,7 +221,10 @@ Source:
             "estimated_minutes": estimated_minutes,
             "cached": False
         }
+        logger.info("generate_artifact completed", extra={"user_id": user_id, "artifact_id": artifact_id})
+        return result
     except Exception as e:
+        logger.exception("generate_artifact failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -235,6 +248,7 @@ def generate_5min_summary(
     Returns:
         Dict with status, artifact_id, content, estimated_minutes (always 5)
     """
+    logger.info("generate_5min_summary called", extra={"user_id": user_id, "content_id": content_id})
     return _run_async(
         _generate_5min_async(user_id, content_id, profile_version, style_dna)
     )
@@ -250,6 +264,7 @@ async def _generate_5min_async(
     try:
         row = await conn.fetchrow("SELECT raw_text FROM content_items WHERE id = $1", content_id)
         if not row:
+            logger.info("generate_5min_summary content not found", extra={"content_id": content_id})
             return {"status": "error", "error": "Content not found"}
         
         system_instruction = _build_system_instruction(style_dna)
@@ -275,13 +290,16 @@ Source:
             user_id, [content_id], profile_version, response.text
         )
         
-        return {
+        result = {
             "status": "success",
             "artifact_id": str(artifact_row["id"]),
             "content": response.text,
             "estimated_minutes": 5
         }
+        logger.info("generate_5min_summary completed", extra={"user_id": user_id, "artifact_id": result["artifact_id"]})
+        return result
     except Exception as e:
+        logger.exception("generate_5min_summary failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -297,6 +315,7 @@ def get_artifact(artifact_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status and artifact details or error
     """
+    logger.info("get_artifact called", extra={"artifact_id": artifact_id})
     return _run_async(_get_artifact_async(artifact_id))
 
 
@@ -305,8 +324,9 @@ async def _get_artifact_async(artifact_id: str) -> Dict[str, Any]:
     try:
         row = await conn.fetchrow("SELECT * FROM artifacts WHERE id = $1", artifact_id)
         if not row:
+            logger.info("get_artifact not found", extra={"artifact_id": artifact_id})
             return {"status": "error", "error": "Artifact not found"}
-        return {
+        result = {
             "status": "success",
             "id": str(row["id"]),
             "content": row["content"],
@@ -314,7 +334,10 @@ async def _get_artifact_async(artifact_id: str) -> Dict[str, Any]:
             "estimated_minutes": row.get("estimated_minutes"),
             "created_at": str(row["created_at"])
         }
+        logger.info("get_artifact completed", extra={"artifact_id": artifact_id})
+        return result
     except Exception as e:
+        logger.exception("get_artifact failed", extra={"artifact_id": artifact_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -331,6 +354,7 @@ def list_artifacts(user_id: str, artifact_type: Optional[str] = None) -> Dict[st
     Returns:
         Dict with status and list of artifact summaries
     """
+    logger.info("list_artifacts called", extra={"user_id": user_id, "artifact_type": artifact_type})
     return _run_async(_list_artifacts_async(user_id, artifact_type))
 
 
@@ -347,14 +371,17 @@ async def _list_artifacts_async(user_id: str, artifact_type: str) -> Dict[str, A
                 "SELECT id, artifact_type, estimated_minutes, created_at FROM artifacts WHERE user_id = $1 ORDER BY created_at DESC",
                 user_id
             )
-        return {
+        result = {
             "status": "success",
             "artifacts": [
                 {"id": str(r["id"]), "artifact_type": r["artifact_type"], "estimated_minutes": r.get("estimated_minutes"), "created_at": str(r["created_at"])}
                 for r in rows
             ]
         }
+        logger.info("list_artifacts completed", extra={"user_id": user_id, "count": len(result["artifacts"])})
+        return result
     except Exception as e:
+        logger.exception("list_artifacts failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()

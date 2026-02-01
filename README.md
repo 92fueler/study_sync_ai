@@ -226,6 +226,15 @@ pytest tests/ --ignore=tests/test_integration.py -v
 GEMINI_API_KEY=your-key pytest tests/test_integration.py -v
 ```
 
+### E2E (Playwright)
+
+```bash
+npx --prefix frontend playwright install
+npm --prefix frontend run test:e2e
+```
+
+See `docs/impl-05-verification.md` section 8.3 for full steps and expectations.
+
 ## 🐛 Troubleshooting
 
 ### Port Already in Use

@@ -6,16 +6,22 @@ ADK tools for user profile management, style DNA, and calendar integration.
 
 import asyncio
 import json
+import logging
 import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 import asyncpg
 
+logger = logging.getLogger(__name__)
+if not logging.getLogger().handlers:
+    logging.basicConfig(level=os.getenv("AGENT_LOG_LEVEL", "INFO"))
 
 async def _get_db_connection():
     """Get database connection."""
-    return await asyncpg.connect(os.getenv("SUPABASE_URL", ""))
+    dsn = os.getenv("SUPABASE_URL", "")
+    logger.debug("Connecting to DB for profile tools")
+    return await asyncpg.connect(dsn)
 
 
 def _run_async(coro):
@@ -53,6 +59,7 @@ def create_profile(
     Returns:
         Dict with status, profile_id, and user_id
     """
+    logger.info("create_profile called", extra={"user_id": user_id})
     return _run_async(
         _create_profile_async(user_id, display_name, goals, style_dna, calendar_context)
     )
@@ -72,6 +79,7 @@ async def _create_profile_async(
             "SELECT id FROM user_profiles WHERE user_id = $1", user_id
         )
         if existing:
+            logger.info("create_profile exists", extra={"user_id": user_id})
             return {"status": "error", "error": "Profile already exists", "profile_id": str(existing["id"])}
         
         row = await conn.fetchrow(
@@ -85,8 +93,11 @@ async def _create_profile_async(
             json.dumps(goals) if goals else None,
             json.dumps(calendar_context) if calendar_context else None
         )
-        return {"status": "success", "profile_id": str(row["id"]), "user_id": user_id}
+        result = {"status": "success", "profile_id": str(row["id"]), "user_id": user_id}
+        logger.info("create_profile completed", extra={"user_id": user_id, "profile_id": result["profile_id"]})
+        return result
     except Exception as e:
+        logger.exception("create_profile failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -102,6 +113,7 @@ def get_profile(user_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status, user_id, display_name, style_dna, goals, calendar_context, profile_version
     """
+    logger.info("get_profile called", extra={"user_id": user_id})
     return _run_async(_get_profile_async(user_id))
 
 
@@ -112,6 +124,7 @@ async def _get_profile_async(user_id: str) -> Dict[str, Any]:
             "SELECT * FROM user_profiles WHERE user_id = $1", user_id
         )
         if not row:
+            logger.info("get_profile default", extra={"user_id": user_id})
             return {
                 "status": "success",
                 "user_id": user_id,
@@ -120,7 +133,7 @@ async def _get_profile_async(user_id: str) -> Dict[str, Any]:
                 "profile_version": 1,
                 "is_default": True
             }
-        return {
+        result = {
             "status": "success",
             "user_id": row["user_id"],
             "display_name": row.get("display_name"),
@@ -129,7 +142,10 @@ async def _get_profile_async(user_id: str) -> Dict[str, Any]:
             "calendar_context": json.loads(row["calendar_context"]) if row.get("calendar_context") else None,
             "profile_version": row.get("profile_version", 1)
         }
+        logger.info("get_profile completed", extra={"user_id": user_id})
+        return result
     except Exception as e:
+        logger.exception("get_profile failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -155,6 +171,7 @@ def update_profile(
     Returns:
         Dict with status and new profile_version
     """
+    logger.info("update_profile called", extra={"user_id": user_id})
     return _run_async(
         _update_profile_async(user_id, display_name, goals, style_dna, calendar_context)
     )
@@ -191,6 +208,7 @@ async def _update_profile_async(
             idx += 1
         
         if not updates:
+            logger.info("update_profile no updates", extra={"user_id": user_id})
             return {"status": "error", "error": "No fields to update"}
         
         values.append(user_id)
@@ -201,8 +219,11 @@ async def _update_profile_async(
         row = await conn.fetchrow(
             "SELECT profile_version FROM user_profiles WHERE user_id = $1", user_id
         )
-        return {"status": "success", "profile_version": row["profile_version"] if row else 1}
+        result = {"status": "success", "profile_version": row["profile_version"] if row else 1}
+        logger.info("update_profile completed", extra={"user_id": user_id, "profile_version": result["profile_version"]})
+        return result
     except Exception as e:
+        logger.exception("update_profile failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -218,6 +239,7 @@ def get_calendar_context(user_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status, has_calendar, next_slot_minutes, and context type
     """
+    logger.info("get_calendar_context called", extra={"user_id": user_id})
     return _run_async(_get_calendar_context_async(user_id))
 
 
@@ -229,6 +251,7 @@ async def _get_calendar_context_async(user_id: str) -> Dict[str, Any]:
         )
         
         if not row or not row.get("calendar_context"):
+            logger.info("get_calendar_context default", extra={"user_id": user_id})
             return {"status": "success", "has_calendar": False, "next_slot_minutes": 25, "context": "default"}
         
         cal = json.loads(row["calendar_context"])
@@ -241,7 +264,9 @@ async def _get_calendar_context_async(user_id: str) -> Dict[str, Any]:
                 start_h = int(commute.split("-")[0].split(":")[0])
                 end_h = int(commute.split("-")[1].split(":")[0])
                 if start_h <= hour < end_h:
-                    return {"status": "success", "has_calendar": True, "next_slot_minutes": 30, "context": "commute", **cal}
+                    result = {"status": "success", "has_calendar": True, "next_slot_minutes": 30, "context": "commute", **cal}
+                    logger.info("get_calendar_context commute", extra={"user_id": user_id})
+                    return result
         
         # Check work hours
         work_hours = cal.get("work_hours", "")
@@ -249,10 +274,15 @@ async def _get_calendar_context_async(user_id: str) -> Dict[str, Any]:
             start_h = int(work_hours.split("-")[0].split(":")[0])
             end_h = int(work_hours.split("-")[1].split(":")[0])
             if start_h <= hour < end_h:
-                return {"status": "success", "has_calendar": True, "next_slot_minutes": 5, "context": "work", **cal}
+                result = {"status": "success", "has_calendar": True, "next_slot_minutes": 5, "context": "work", **cal}
+                logger.info("get_calendar_context work", extra={"user_id": user_id})
+                return result
         
-        return {"status": "success", "has_calendar": True, "next_slot_minutes": 45, "context": "free_time", **cal}
+        result = {"status": "success", "has_calendar": True, "next_slot_minutes": 45, "context": "free_time", **cal}
+        logger.info("get_calendar_context free_time", extra={"user_id": user_id})
+        return result
     except Exception as e:
+        logger.exception("get_calendar_context failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
@@ -280,6 +310,7 @@ def record_feedback(
     Returns:
         Dict with status and feedback_id
     """
+    logger.info("record_feedback called", extra={"user_id": user_id, "artifact_id": artifact_id})
     return _run_async(
         _record_feedback_async(user_id, artifact_id, explicit_rating, time_spent_seconds, scroll_depth_percent, completed)
     )
@@ -304,8 +335,11 @@ async def _record_feedback_async(
             """,
             user_id, artifact_id, explicit_rating, time_spent_seconds, scroll_depth_percent, completed
         )
-        return {"status": "success", "feedback_id": str(row["id"])}
+        result = {"status": "success", "feedback_id": str(row["id"])}
+        logger.info("record_feedback completed", extra={"user_id": user_id, "feedback_id": result["feedback_id"]})
+        return result
     except Exception as e:
+        logger.exception("record_feedback failed", extra={"user_id": user_id})
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()

@@ -7,6 +7,8 @@ CRUD for learning plans and plan items (non-agent, direct DB).
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import json
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -84,6 +86,12 @@ def _plan_row_to_dict(row) -> Dict[str, Any]:
     plan["id"] = str(plan["id"])
     plan["created_at"] = plan.get("created_at")
     plan["updated_at"] = plan.get("updated_at")
+    for field in ("details", "metadata"):
+        if isinstance(plan.get(field), str):
+            try:
+                plan[field] = json.loads(plan[field])
+            except Exception:
+                pass
     return plan
 
 
@@ -115,6 +123,8 @@ async def create_learning_plan(request: PlanCreate):
         RETURNING *
     """
     try:
+        details_payload = json.dumps(request.details) if request.details is not None else None
+        metadata_payload = json.dumps(request.metadata) if request.metadata is not None else None
         row = await fetchrow(
             query,
             request.user_id,
@@ -134,13 +144,13 @@ async def create_learning_plan(request: PlanCreate):
             request.paused_at,
             request.weeks,
             request.sessions_per_week,
-            request.details,
-            request.metadata,
+            details_payload,
+            metadata_payload,
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Database error")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Database error: {exc}")
 
     plan = _plan_row_to_dict(row)
     items: List[Dict[str, Any]] = []
@@ -169,8 +179,8 @@ async def create_learning_plan(request: PlanCreate):
                 items.append(_item_row_to_dict(item_row))
             except RuntimeError as exc:
                 raise HTTPException(status_code=503, detail=str(exc))
-            except Exception:
-                raise HTTPException(status_code=500, detail="Database error")
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=f"Database error: {exc}")
 
     return {"plan": plan, "items": items}
 
@@ -280,6 +290,8 @@ async def update_learning_plan(plan_id: str, user_id: str = Query(...), update: 
     idx = 1
 
     for field, value in update.model_dump(exclude_unset=True).items():
+        if field in {"details", "metadata"} and value is not None:
+            value = json.dumps(value)
         updates.append(f"{field} = ${idx}")
         params.append(value)
         idx += 1
