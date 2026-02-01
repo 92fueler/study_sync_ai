@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Bell, User } from 'lucide-react';
-import { getNotificationBadge, getNotifications, markNotificationRead, searchAll } from '../api/client';
+import { API_BASE_URL, getNotificationBadge, getNotifications, markNotificationRead, searchAll } from '../api/client';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
     const location = useLocation();
@@ -16,7 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
-    const notificationsPollRef = useRef<number | null>(null);
+    const notificationsStreamRef = useRef<EventSource | null>(null);
 
     const isActive = (path: string) => location.pathname === path;
 
@@ -118,29 +118,50 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (!isNotificationsOpen || !userId) return;
-        void loadNotifications();
-    }, [isNotificationsOpen, userId]);
+        if (notifications.length === 0) {
+            void loadNotifications();
+        }
+    }, [isNotificationsOpen, userId, notifications.length]);
 
     useEffect(() => {
         if (!userId) return;
-        if (notificationsPollRef.current) {
-            window.clearInterval(notificationsPollRef.current);
+        if (notificationsStreamRef.current) {
+            notificationsStreamRef.current.close();
         }
-        const poll = () => {
+        const sseUrl = `${API_BASE_URL.replace(/\\/$/, '')}/notifications/stream?user_id=${userId}`;
+        const stream = new EventSource(sseUrl, { withCredentials: false });
+        notificationsStreamRef.current = stream;
+
+        stream.addEventListener('notifications', (event) => {
+            try {
+                const payload = JSON.parse((event as MessageEvent).data || '{}');
+                const incoming = Array.isArray(payload.notifications) ? payload.notifications : [];
+                if (incoming.length) {
+                    setNotifications((prev) => {
+                        const seen = new Set(prev.map((item: any) => item.id));
+                        const merged = [...incoming.filter((item: any) => !seen.has(item.id)), ...prev];
+                        return merged;
+                    });
+                }
+                if (typeof payload.unread_count === 'number') {
+                    setUnreadCount(payload.unread_count);
+                }
+            } catch (error) {
+                console.error('Failed to parse notification stream', error);
+            }
+        });
+
+        stream.addEventListener('error', () => {
+            stream.close();
+            notificationsStreamRef.current = null;
             void loadBadge();
-            if (isNotificationsOpen) {
-                void loadNotifications();
-            }
-        };
-        poll();
-        notificationsPollRef.current = window.setInterval(poll, 5000);
+        });
+
         return () => {
-            if (notificationsPollRef.current) {
-                window.clearInterval(notificationsPollRef.current);
-                notificationsPollRef.current = null;
-            }
+            stream.close();
+            notificationsStreamRef.current = null;
         };
-    }, [userId, isNotificationsOpen]);
+    }, [userId]);
 
     return (
         <div className="min-h-screen bg-gray-50">

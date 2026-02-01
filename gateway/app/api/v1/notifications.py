@@ -4,9 +4,13 @@ Notifications API Endpoints
 Reads notifications from the database.
 """
 
-from typing import Any, Dict, List
+import asyncio
+import json
+from datetime import datetime, timezone
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from app.db import fetch, fetchrow
 
@@ -72,3 +76,85 @@ async def mark_as_read(notification_id: str, user_id: str = Query("system")):
         raise HTTPException(status_code=500, detail="Database error")
 
     return {"success": row is not None}
+
+
+def _sse_event(event: str, data: Dict[str, Any]) -> str:
+    payload = json.dumps(data)
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+@router.get("/stream")
+async def stream_notifications(user_id: str = Query(...)):
+    """Stream notifications via SSE."""
+    async def event_stream() -> AsyncGenerator[str, None]:
+        last_seen: Optional[datetime] = None
+        while True:
+            try:
+                if last_seen is None:
+                    rows = await fetch(
+                        """
+                        SELECT id, user_id, title, body, data, sent, read, sent_at, created_at
+                        FROM notifications
+                        WHERE user_id = $1
+                        ORDER BY created_at DESC
+                        LIMIT 50
+                        """,
+                        user_id,
+                    )
+                    badge_row = await fetchrow(
+                        """
+                        SELECT COUNT(*) AS unread_count
+                        FROM notifications
+                        WHERE user_id = $1 AND read = FALSE
+                        """,
+                        user_id,
+                    )
+                    notifications: List[Dict[str, Any]] = [dict(row) for row in rows]
+                    if notifications:
+                        last_seen = notifications[0]["created_at"]
+                    yield _sse_event(
+                        "notifications",
+                        {
+                            "notifications": notifications,
+                            "unread_count": int(badge_row["unread_count"] if badge_row else 0),
+                        },
+                    )
+                else:
+                    rows = await fetch(
+                        """
+                        SELECT id, user_id, title, body, data, sent, read, sent_at, created_at
+                        FROM notifications
+                        WHERE user_id = $1 AND created_at > $2
+                        ORDER BY created_at DESC
+                        """,
+                        user_id,
+                        last_seen,
+                    )
+                    if rows:
+                        notifications = [dict(row) for row in rows]
+                        last_seen = notifications[0]["created_at"]
+                        badge_row = await fetchrow(
+                            """
+                            SELECT COUNT(*) AS unread_count
+                            FROM notifications
+                            WHERE user_id = $1 AND read = FALSE
+                            """,
+                            user_id,
+                        )
+                        yield _sse_event(
+                            "notifications",
+                            {
+                                "notifications": notifications,
+                                "unread_count": int(badge_row["unread_count"] if badge_row else 0),
+                            },
+                        )
+                    else:
+                        yield _sse_event("keepalive", {"ts": datetime.now(timezone.utc).isoformat()})
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                yield _sse_event("error", {"message": "stream_error"})
+                await asyncio.sleep(5)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
