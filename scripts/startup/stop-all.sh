@@ -44,11 +44,14 @@ if pgrep -f "vite|npm.*dev|node.*dev" > /dev/null 2>&1; then
     ps aux | grep -E "npm.*run.*dev|node.*vite" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || true
 fi
 
-# Stop Docker services and remove volumes
-echo "Stopping Docker services and removing volumes..."
-docker-compose down -v --remove-orphans
+# Stop Docker services (preserve volumes to keep database data)
+echo "Stopping Docker services (preserving volumes to keep database data)..."
+docker-compose down --remove-orphans
 
 echo ""
 echo "=== All services stopped ==="
 echo "Backend (port 8000) and Frontend (port 3000) processes have been terminated."
-echo "Docker containers and volumes have been removed."
+echo "Docker containers stopped. Volumes preserved - your database data is safe!"
+echo ""
+echo "Note: Your materials and data are preserved in Docker volumes."
+echo "To completely remove volumes (WARNING: deletes all data), use: docker-compose down -v"

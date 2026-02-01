@@ -1,13 +1,14 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import {
     ChevronLeft, Clock, BookOpen, Play, CheckCircle,
-    Lock, Calendar, Award, ArrowRight, RefreshCw
+    Lock, Calendar, Award, ArrowRight, RefreshCw, Edit, Trash2, Pause, X, Save
 } from 'lucide-react';
-import { getLearningPlan, updateLearningPlan, getGoogleCalendarAuthUrl } from '../api/client';
+import { getLearningPlan, updateLearningPlan, deleteLearningPlan, pauseLearningPlan, resumeLearningPlan, getGoogleCalendarAuthUrl } from '../api/client';
 
 export default function PlanDetail() {
     const { id } = useParams<{ id: string }>();
+    const navigate = useNavigate();
     const [userId, setUserId] = useState('');
     const [plan, setPlan] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
@@ -15,6 +16,12 @@ export default function PlanDetail() {
     const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
     const [difficultyChoice, setDifficultyChoice] = useState<'easier' | 'ok' | 'harder'>('ok');
+    const [isEditing, setIsEditing] = useState(false);
+    const [editForm, setEditForm] = useState({ title: '', description: '', goal: '' });
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [isPausing, setIsPausing] = useState(false);
+    const [isResuming, setIsResuming] = useState(false);
 
     const handleCheckAvailability = async () => {
         if (isConnecting) return;
@@ -57,8 +64,16 @@ export default function PlanDetail() {
             try {
                 setLoading(true);
                 const response = await getLearningPlan(id, userId);
-                setPlan(response.plan || null);
-                const current = response.plan?.difficulty?.toLowerCase();
+                const loadedPlan = response.plan || null;
+                setPlan(loadedPlan);
+                if (loadedPlan) {
+                    setEditForm({
+                        title: loadedPlan.title || '',
+                        description: loadedPlan.description || '',
+                        goal: loadedPlan.goal || '',
+                    });
+                }
+                const current = loadedPlan?.difficulty?.toLowerCase();
                 if (current === 'beginner') setDifficultyChoice('easier');
                 else if (current === 'advanced') setDifficultyChoice('harder');
                 else setDifficultyChoice('ok');
@@ -105,6 +120,85 @@ export default function PlanDetail() {
             }
         } catch (error) {
             console.error('Failed to update difficulty', error);
+        }
+    };
+
+    const handleEdit = () => {
+        setIsEditing(true);
+    };
+
+    const handleCancelEdit = () => {
+        setIsEditing(false);
+        if (plan) {
+            setEditForm({
+                title: plan.title || '',
+                description: plan.description || '',
+                goal: plan.goal || '',
+            });
+        }
+    };
+
+    const handleSaveEdit = async () => {
+        if (!plan || !userId) return;
+        try {
+            const response = await updateLearningPlan(plan.id, userId, {
+                title: editForm.title,
+                description: editForm.description,
+                goal: editForm.goal,
+            });
+            if (response?.plan) {
+                setPlan(response.plan);
+                setIsEditing(false);
+            }
+        } catch (error) {
+            console.error('Failed to update plan', error);
+            setErrorMessage('Failed to save changes.');
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!plan || !userId || !id) return;
+        setIsDeleting(true);
+        try {
+            await deleteLearningPlan(id, userId);
+            navigate('/plan');
+        } catch (error) {
+            console.error('Failed to delete plan', error);
+            setErrorMessage('Failed to delete plan.');
+            setIsDeleting(false);
+            setShowDeleteConfirm(false);
+        }
+    };
+
+    const handlePause = async () => {
+        if (!plan || !userId) return;
+        setIsPausing(true);
+        try {
+            const response = await pauseLearningPlan(plan.id, userId);
+            if (response?.plan) {
+                setPlan(response.plan);
+            }
+        } catch (error) {
+            console.error('Failed to pause plan', error);
+            setErrorMessage('Failed to pause plan.');
+        } finally {
+            setIsPausing(false);
+        }
+    };
+
+    const handleResume = async () => {
+        if (!plan || !userId) return;
+        setIsResuming(true);
+        try {
+            const response = await resumeLearningPlan(plan.id, userId);
+            if (response?.plan) {
+                setPlan(response.plan);
+            }
+        } catch (error) {
+            console.error('Failed to resume plan', error);
+            setErrorMessage('Failed to resume plan.');
+        } finally {
+            setIsResuming(false);
         }
     };
 
@@ -160,13 +254,51 @@ export default function PlanDetail() {
             {/* Header / Hero Section */}
             <div className="bg-white border-b border-gray-200 sticky top-16 z-30 shadow-sm">
                 <div className="max-w-7xl mx-auto px-6 py-6">
-                    <div className="flex items-center gap-2 mb-6 text-sm text-gray-500">
-                        <Link to="/plan" className="hover:text-gray-900 flex items-center gap-1">
-                            <ChevronLeft className="w-4 h-4" />
-                            Back to Plans
-                        </Link>
-                        <span>/</span>
-                        <span>{plan.title}</span>
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                            <Link to="/plan" className="hover:text-gray-900 flex items-center gap-1">
+                                <ChevronLeft className="w-4 h-4" />
+                                Back to Plans
+                            </Link>
+                            <span>/</span>
+                            <span>{plan.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {plan.status === 'active' && (
+                                <button
+                                    onClick={handlePause}
+                                    disabled={isPausing}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                                >
+                                    <Pause className="w-4 h-4" />
+                                    {isPausing ? 'Pausing...' : 'Pause'}
+                                </button>
+                            )}
+                            {plan.status === 'paused' && (
+                                <button
+                                    onClick={handleResume}
+                                    disabled={isResuming}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm text-blue-700 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+                                >
+                                    <Play className="w-4 h-4" />
+                                    {isResuming ? 'Resuming...' : 'Resume'}
+                                </button>
+                            )}
+                            <button
+                                onClick={handleEdit}
+                                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                <Edit className="w-4 h-4" />
+                                Edit
+                            </button>
+                            <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="flex items-center gap-2 px-4 py-2 text-sm text-red-700 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
+                            </button>
+                        </div>
                     </div>
 
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
@@ -179,16 +311,66 @@ export default function PlanDetail() {
                                     {plan.difficulty}
                                 </span>
                             </div>
-                            <h1 className="text-3xl md:text-4xl font-serif font-bold text-gray-900 mb-4">
-                                {plan.title}
-                            </h1>
-                            <p className="text-gray-600 max-w-2xl text-lg leading-relaxed mb-3">
-                                {plan.description}
-                            </p>
-                            {plan.goal && (
-                                <div className="text-sm text-gray-500 max-w-2xl">
-                                    <span className="font-semibold text-gray-700">Goal:</span> {plan.goal}
+                            {isEditing ? (
+                                <div className="space-y-4 mb-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.title}
+                                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg font-bold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                        <textarea
+                                            value={editForm.description}
+                                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                                            rows={4}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Goal</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.goal}
+                                            onChange={(e) => setEditForm({ ...editForm, goal: e.target.value })}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={handleSaveEdit}
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                                        >
+                                            <Save className="w-4 h-4" />
+                                            Save Changes
+                                        </button>
+                                        <button
+                                            onClick={handleCancelEdit}
+                                            className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                        >
+                                            <X className="w-4 h-4" />
+                                            Cancel
+                                        </button>
+                                    </div>
                                 </div>
+                            ) : (
+                                <>
+                                    <h1 className="text-3xl md:text-4xl font-serif font-bold text-gray-900 mb-4">
+                                        {plan.title}
+                                    </h1>
+                                    <p className="text-gray-600 max-w-2xl text-lg leading-relaxed mb-3">
+                                        {plan.description}
+                                    </p>
+                                    {plan.goal && (
+                                        <div className="text-sm text-gray-500 max-w-2xl">
+                                            <span className="font-semibold text-gray-700">Goal:</span> {plan.goal}
+                                        </div>
+                                    )}
+                                </>
                             )}
                             <div className="mt-4">
                                 <div className="text-xs uppercase font-semibold text-gray-400 mb-2">
@@ -362,6 +544,35 @@ export default function PlanDetail() {
                     })}
                 </div>
             </div>
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Learning Plan</h3>
+                        <p className="text-gray-600 mb-6">
+                            Are you sure you want to delete "{plan.title}"? This action cannot be undone and will delete all associated modules and progress.
+                        </p>
+                        <div className="flex items-center gap-3 justify-end">
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                disabled={isDeleting}
+                                className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                disabled={isDeleting}
+                                className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete Plan'}
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

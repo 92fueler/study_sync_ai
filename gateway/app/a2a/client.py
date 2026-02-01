@@ -240,6 +240,16 @@ class A2AClient:
                                 for part in parts:
                                     if "text" in part:
                                         result["text"] = part["text"]
+                                    # Also capture function_response if present (ADK tool results)
+                                    if "function_response" in part:
+                                        if "function_responses" not in result:
+                                            result["function_responses"] = []
+                                        result["function_responses"].append(part["function_response"])
+                                    # Also check for function_call (tool invocation)
+                                    if "function_call" in part:
+                                        if "function_calls" not in result:
+                                            result["function_calls"] = []
+                                        result["function_calls"].append(part["function_call"])
                         except json.JSONDecodeError:
                             pass
                 return A2AResponse.success(result, session_id)

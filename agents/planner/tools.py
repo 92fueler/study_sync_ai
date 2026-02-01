@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 import asyncpg
@@ -122,6 +123,29 @@ def _run_async(coro):
         return asyncio.run(coro)
 
 
+def _parse_topics(topics_raw) -> List[str]:
+    """
+    Safely parse topics from database (could be JSONB string or already parsed list).
+    
+    Args:
+        topics_raw: Raw topics value from database (string, list, or None)
+    
+    Returns:
+        List of topic strings
+    """
+    if not topics_raw:
+        return []
+    if isinstance(topics_raw, list):
+        return topics_raw
+    if isinstance(topics_raw, str):
+        try:
+            parsed = json.loads(topics_raw)
+            return parsed if isinstance(parsed, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+    return []
+
+
 def get_priority_queue(user_id: str, limit: int = 10) -> Dict[str, Any]:
     """
     Get prioritized content queue for a user.
@@ -138,71 +162,70 @@ def get_priority_queue(user_id: str, limit: int = 10) -> Dict[str, Any]:
 
 
 async def _get_priority_queue_async(user_id: str, limit: int) -> Dict[str, Any]:
-    conn = await _get_db_connection()
-    try:
-        # Get user profile
-        profile = await conn.fetchrow("SELECT goals FROM user_profiles WHERE user_id = $1", user_id)
-        goals = json.loads(profile["goals"]) if profile and profile.get("goals") else []
-        
-        # Get user's materials
-        materials = await conn.fetch(
-            """
-            SELECT um.content_id, ci.title, ci.topics, ci.word_count, ci.created_at
-            FROM user_materials um
-            JOIN content_items ci ON um.content_id = ci.id
-            WHERE um.user_id = $1 AND um.status = 'PROCESSED'
-            """,
-            user_id
-        )
-        
-        if not materials:
-            logger.info("get_priority_queue completed", extra={"user_id": user_id, "count": 0})
-            return {"status": "success", "queue": [], "message": "No content to prioritize"}
-        
-        queue = []
-        for m in materials:
-            topics = json.loads(m["topics"]) if m.get("topics") else []
+    pool = await _get_db_pool()
+    async with pool.acquire() as conn:
+        try:
+            # Get user profile
+            profile = await conn.fetchrow("SELECT goals FROM user_profiles WHERE user_id = $1", user_id)
+            goals = json.loads(profile["goals"]) if profile and profile.get("goals") else []
             
-            # Calculate signals
-            goal_score = await _calc_goal_match(topics, goals, m.get("title", ""))
-            trending_score = _calc_trending(m.get("created_at"))
-            prereq_score = _calc_prerequisite(topics, m.get("title", ""))
-            behavior_score = 0.5  # Default
-            
-            # Weighted sum
-            final_score = (
-                WEIGHT_GOAL_MATCH * goal_score +
-                WEIGHT_TRENDING * trending_score +
-                WEIGHT_PREREQUISITE * prereq_score +
-                WEIGHT_BEHAVIOR * behavior_score
+            # Get user's materials
+            materials = await conn.fetch(
+                """
+                SELECT um.content_id, ci.title, ci.topics, ci.word_count, ci.created_at
+                FROM user_materials um
+                JOIN content_items ci ON um.content_id = ci.id
+                WHERE um.user_id = $1 AND um.status = 'PROCESSED'
+                """,
+                user_id
             )
             
-            reasoning = _generate_reasoning(goal_score, trending_score, prereq_score, goals, m.get("title", ""))
+            if not materials:
+                logger.info("get_priority_queue completed", extra={"user_id": user_id, "count": 0})
+                return {"status": "success", "queue": [], "message": "No content to prioritize"}
             
-            queue.append({
-                "content_id": str(m["content_id"]),
-                "title": m.get("title", "Untitled"),
-                "topics": topics,
-                "priority_score": round(final_score, 3),
-                "priority_reasoning": reasoning,
-                "signals": {
-                    "goal_match": round(goal_score, 2),
-                    "trending": round(trending_score, 2),
-                    "prerequisites": round(prereq_score, 2),
-                    "behavior": round(behavior_score, 2)
-                },
-                "word_count": m.get("word_count", 0)
-            })
-        
-        queue.sort(key=lambda x: x["priority_score"], reverse=True)
-        result = {"status": "success", "queue": queue[:limit], "total_items": len(queue)}
-        logger.info("get_priority_queue completed", extra={"user_id": user_id, "count": len(result["queue"])})
-        return result
-    except Exception as e:
-        logger.exception("get_priority_queue failed", extra={"user_id": user_id})
-        return {"status": "error", "error": str(e)}
-    finally:
-        await conn.close()
+            queue = []
+            for m in materials:
+                topics = _parse_topics(m.get("topics"))
+                
+                # Calculate signals
+                goal_score = await _calc_goal_match(topics, goals, m.get("title", ""))
+                trending_score = _calc_trending(m.get("created_at"))
+                prereq_score = _calc_prerequisite(topics, m.get("title", ""))
+                behavior_score = 0.5  # Default
+                
+                # Weighted sum
+                final_score = (
+                    WEIGHT_GOAL_MATCH * goal_score +
+                    WEIGHT_TRENDING * trending_score +
+                    WEIGHT_PREREQUISITE * prereq_score +
+                    WEIGHT_BEHAVIOR * behavior_score
+                )
+                
+                reasoning = _generate_reasoning(goal_score, trending_score, prereq_score, goals, m.get("title", ""))
+                
+                queue.append({
+                    "content_id": str(m["content_id"]),
+                    "title": m.get("title", "Untitled"),
+                    "topics": topics,
+                    "priority_score": round(final_score, 3),
+                    "priority_reasoning": reasoning,
+                    "signals": {
+                        "goal_match": round(goal_score, 2),
+                        "trending": round(trending_score, 2),
+                        "prerequisites": round(prereq_score, 2),
+                        "behavior": round(behavior_score, 2)
+                    },
+                    "word_count": m.get("word_count", 0)
+                })
+            
+            queue.sort(key=lambda x: x["priority_score"], reverse=True)
+            result = {"status": "success", "queue": queue[:limit], "total_items": len(queue)}
+            logger.info("get_priority_queue completed", extra={"user_id": user_id, "count": len(result["queue"])})
+            return result
+        except Exception as e:
+            logger.exception("get_priority_queue failed", extra={"user_id": user_id})
+            return {"status": "error", "error": str(e)}
 
 
 async def _calc_goal_match(topics: List[str], goals: List[str], title: str) -> float:
@@ -335,36 +358,35 @@ def cluster_topics(user_id: str) -> Dict[str, Any]:
 
 
 async def _cluster_topics_async(user_id: str) -> Dict[str, Any]:
-    conn = await _get_db_connection()
-    try:
-        materials = await conn.fetch(
-            """
-            SELECT um.content_id, ci.title, ci.topics
-            FROM user_materials um
-            JOIN content_items ci ON um.content_id = ci.id
-            WHERE um.user_id = $1 AND um.status = 'PROCESSED'
-            """,
-            user_id
-        )
-        
-        topic_map = {}
-        for m in materials:
-            topics = json.loads(m["topics"]) if m.get("topics") else []
-            for topic in topics:
-                if topic not in topic_map:
-                    topic_map[topic] = []
-                topic_map[topic].append({"content_id": str(m["content_id"]), "title": m.get("title")})
-        
-        clusters = [{"topic": t, "content_count": len(items), "items": items} for t, items in topic_map.items()]
-        clusters.sort(key=lambda x: x["content_count"], reverse=True)
-        result = {"status": "success", "clusters": clusters}
-        logger.info("cluster_topics completed", extra={"user_id": user_id, "clusters": len(clusters)})
-        return result
-    except Exception as e:
-        logger.exception("cluster_topics failed", extra={"user_id": user_id})
-        return {"status": "error", "error": str(e)}
-    finally:
-        await conn.close()
+    pool = await _get_db_pool()
+    async with pool.acquire() as conn:
+        try:
+            materials = await conn.fetch(
+                """
+                SELECT um.content_id, ci.title, ci.topics
+                FROM user_materials um
+                JOIN content_items ci ON um.content_id = ci.id
+                WHERE um.user_id = $1 AND um.status = 'PROCESSED'
+                """,
+                user_id
+            )
+            
+            topic_map = {}
+            for m in materials:
+                topics = json.loads(m["topics"]) if m.get("topics") else []
+                for topic in topics:
+                    if topic not in topic_map:
+                        topic_map[topic] = []
+                    topic_map[topic].append({"content_id": str(m["content_id"]), "title": m.get("title")})
+            
+            clusters = [{"topic": t, "content_count": len(items), "items": items} for t, items in topic_map.items()]
+            clusters.sort(key=lambda x: x["content_count"], reverse=True)
+            result = {"status": "success", "clusters": clusters}
+            logger.info("cluster_topics completed", extra={"user_id": user_id, "clusters": len(clusters)})
+            return result
+        except Exception as e:
+            logger.exception("cluster_topics failed", extra={"user_id": user_id})
+            return {"status": "error", "error": str(e)}
 
 
 def calculate_effort(content_id: str) -> Dict[str, Any]:
@@ -382,34 +404,33 @@ def calculate_effort(content_id: str) -> Dict[str, Any]:
 
 
 async def _calculate_effort_async(content_id: str) -> Dict[str, Any]:
-    conn = await _get_db_connection()
-    try:
-        row = await conn.fetchrow("SELECT word_count, topics FROM content_items WHERE id = $1", content_id)
-        if not row:
-            return {"status": "error", "error": "Content not found"}
-        
-        word_count = row.get("word_count", 0)
-        topics = json.loads(row["topics"]) if row.get("topics") else []
-        
-        reading_minutes = max(1, word_count // 200)
-        complexity_factor = 1.5 if len(topics) > 5 else 1.2 if len(topics) > 2 else 1.0
-        study_minutes = int(reading_minutes * complexity_factor)
-        
-        result = {
-            "status": "success",
-            "content_id": content_id,
-            "word_count": word_count,
-            "reading_minutes": reading_minutes,
-            "study_minutes": study_minutes,
-            "complexity": "high" if complexity_factor >= 1.5 else "medium" if complexity_factor >= 1.2 else "low"
-        }
-        logger.info("calculate_effort completed", extra={"content_id": content_id, "study_minutes": study_minutes})
-        return result
-    except Exception as e:
-        logger.exception("calculate_effort failed", extra={"content_id": content_id})
-        return {"status": "error", "error": str(e)}
-    finally:
-        await conn.close()
+    pool = await _get_db_pool()
+    async with pool.acquire() as conn:
+        try:
+            row = await conn.fetchrow("SELECT word_count, topics FROM content_items WHERE id = $1", content_id)
+            if not row:
+                return {"status": "error", "error": "Content not found"}
+            
+            word_count = row.get("word_count", 0)
+            topics = _parse_topics(row.get("topics"))
+            
+            reading_minutes = max(1, word_count // 200)
+            complexity_factor = 1.5 if len(topics) > 5 else 1.2 if len(topics) > 2 else 1.0
+            study_minutes = int(reading_minutes * complexity_factor)
+            
+            result = {
+                "status": "success",
+                "content_id": content_id,
+                "word_count": word_count,
+                "reading_minutes": reading_minutes,
+                "study_minutes": study_minutes,
+                "complexity": "high" if complexity_factor >= 1.5 else "medium" if complexity_factor >= 1.2 else "low"
+            }
+            logger.info("calculate_effort completed", extra={"content_id": content_id, "study_minutes": study_minutes})
+            return result
+        except Exception as e:
+            logger.exception("calculate_effort failed", extra={"content_id": content_id})
+            return {"status": "error", "error": str(e)}
 
 
 # ============================================================================
@@ -464,7 +485,7 @@ async def _get_adaptive_priority_async(user_id: str, context_mode: str, limit: i
             
             queue = []
             for m in materials:
-                topics = json.loads(m["topics"]) if m.get("topics") else []
+                topics = _parse_topics(m.get("topics"))
                 
                 # Calculate signals
                 goal_score = await _calc_goal_match(topics, goals, m.get("title", ""))
@@ -591,7 +612,7 @@ async def _cluster_semantically_async(user_id: str, threshold: float) -> Dict[st
                 cluster_items = [{
                     "content_id": item_id,
                     "title": item.get("title", "Untitled"),
-                    "topics": json.loads(item["topics"]) if item.get("topics") else []
+                    "topics": _parse_topics(item.get("topics"))
                 }]
                 processed_ids.add(item_id)
                 
@@ -605,7 +626,7 @@ async def _cluster_semantically_async(user_id: str, threshold: float) -> Dict[st
                         cluster_items.append({
                             "content_id": similar_id,
                             "title": similar.get("title", "Untitled"),
-                            "topics": json.loads(similar["topics"]) if similar.get("topics") else [],
+                            "topics": _parse_topics(similar.get("topics")),
                             "similarity": round(similarity, 3)
                         })
                         processed_ids.add(similar_id)
@@ -660,7 +681,7 @@ async def _estimate_study_effort_async(content_id: str) -> Dict[str, Any]:
                 return {"status": "error", "error": "Content not found"}
             
             word_count = row.get("word_count", 0)
-            topics = json.loads(row["topics"]) if row.get("topics") else []
+            topics = _parse_topics(row.get("topics"))
             title = row.get("title", "")
             
             # Infer difficulty if not available
@@ -785,3 +806,240 @@ def _generate_adaptive_reasoning(
     }.get(context_mode, "Prioritizing")
     
     return f"{mode_context} {title} because it {', '.join(reasons)}."
+
+
+# ============================================================================
+# Learning Plan Generation
+# ============================================================================
+
+def generate_learning_plan(
+    user_id: str,
+    context_mode: str = "growth",
+    max_plans: int = 3
+) -> Dict[str, Any]:
+    """
+    Generate suggested learning plans from user's content.
+    
+    Uses semantic clustering and LLM to create structured learning plans
+    with modules, sequencing, and time estimates.
+    
+    Args:
+        user_id: User identifier
+        context_mode: "cram" | "growth" | "exploration"
+        max_plans: Maximum number of plans to generate
+    
+    Returns:
+        Dict with status and list of generated plans (each with title, description, 
+        modules, estimated_time, difficulty, etc.)
+    """
+    logger.info("generate_learning_plan called", extra={"user_id": user_id, "context_mode": context_mode, "max_plans": max_plans})
+    return _run_async(_generate_learning_plan_async(user_id, context_mode, max_plans))
+
+
+async def _generate_learning_plan_async(
+    user_id: str,
+    context_mode: str,
+    max_plans: int
+) -> Dict[str, Any]:
+    """Internal async implementation of learning plan generation."""
+    pool = await _get_db_pool()
+    async with pool.acquire() as conn:
+        try:
+            # Get user profile for goals
+            profile = await conn.fetchrow("SELECT goals FROM user_profiles WHERE user_id = $1", user_id)
+            goals = []
+            if profile and profile.get("goals"):
+                try:
+                    goals = json.loads(profile["goals"]) if isinstance(profile["goals"], str) else profile["goals"]
+                except (json.JSONDecodeError, TypeError):
+                    goals = []
+            
+            # Get prioritized content
+            priority_result = await _get_adaptive_priority_async(user_id, context_mode, limit=50)
+            if priority_result.get("status") != "success" or not priority_result.get("queue"):
+                return {
+                    "status": "error",
+                    "error": "No content available to generate plans from"
+                }
+            
+            queue = priority_result["queue"]
+            
+            # Cluster content semantically
+            clusters_result = await _cluster_semantically_async(user_id, threshold=0.7)
+            clusters = clusters_result.get("clusters", [])
+            
+            # Prepare content summary for LLM
+            content_summary = []
+            for item in queue[:20]:  # Limit to top 20 for LLM context
+                content_summary.append({
+                    "content_id": item.get("content_id"),
+                    "title": item.get("title", "Untitled"),
+                    "topics": item.get("topics", []),
+                    "priority_score": item.get("priority_score", 0),
+                    "difficulty": item.get("difficulty", "Intermediate"),
+                    "word_count": item.get("word_count", 0)
+                })
+            
+            # Use LLM to generate learning plans
+            client = _get_genai_client()
+            if not client:
+                return {"status": "error", "error": "LLM client not available"}
+            
+            # Build prompt for plan generation
+            goals_text = ", ".join(goals[:3]) if goals else "general learning"
+            clusters_text = "\n".join([
+                f"- {c['theme']} ({c['item_count']} items)" for c in clusters[:5]
+            ]) if clusters else "No clusters found"
+            
+            prompt = f"""Generate {max_plans} personalized learning plans for a user with these goals: {goals_text}
+
+Context Mode: {context_mode}
+- Cram: Focus on high-value, short-duration content
+- Growth: Balanced approach with foundations first
+- Exploration: Emphasize trending and novel content
+
+Available Content Clusters:
+{clusters_text}
+
+Top Priority Content:
+{json.dumps(content_summary[:10], indent=2)}
+
+For each plan, provide:
+1. title: Descriptive title (e.g., "Machine Learning Fundamentals")
+2. description: 1-2 sentence description
+3. goal: Specific learning goal this plan addresses
+4. difficulty: Beginner | Intermediate | Advanced
+5. category: Main topic category (e.g., "TECH", "SCIENCE", "BUSINESS")
+6. category_color: blue | green | purple | orange | red
+7. estimated_time: Human-readable duration (e.g., "4 weeks", "6 weeks")
+8. weeks: Number of weeks
+9. sessions_per_week: Recommended sessions per week (2-5)
+10. total_modules: Number of learning modules
+11. modules: Array of module objects, each with:
+    - title: Module name
+    - description: What this module covers
+    - content_ids: Array of content IDs to include (from the content_summary above)
+    - order_index: Sequence number (0-based)
+    - estimated_minutes: Estimated study time in minutes
+
+Requirements:
+- Sequence modules logically (foundations → advanced)
+- Each module should reference 1-3 content items from content_summary
+- Total estimated time should match the weeks/sessions_per_week
+- Plans should be distinct (different topics or approaches)
+- For cram mode: shorter plans (2-3 weeks), fewer modules
+- For growth mode: balanced plans (4-6 weeks)
+- For exploration mode: varied topics, shorter modules
+
+Return ONLY valid JSON in this format:
+{{
+  "plans": [
+    {{
+      "title": "...",
+      "description": "...",
+      "goal": "...",
+      "difficulty": "...",
+      "category": "...",
+      "category_color": "...",
+      "estimated_time": "...",
+      "weeks": ...,
+      "sessions_per_week": ...,
+      "total_modules": ...,
+      "modules": [
+        {{
+          "title": "...",
+          "description": "...",
+          "content_ids": ["...", "..."],
+          "order_index": ...,
+          "estimated_minutes": ...
+        }}
+      ]
+    }}
+  ]
+}}"""
+            
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            
+            # Parse LLM response
+            response_text = response.text.strip()
+            
+            # Extract JSON from response (handle markdown code blocks)
+            if "```json" in response_text:
+                start = response_text.find("```json") + 7
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            elif "```" in response_text:
+                start = response_text.find("```") + 3
+                end = response_text.find("```", start)
+                response_text = response_text[start:end].strip()
+            
+            try:
+                plans_data = json.loads(response_text)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse LLM response as JSON: {e}")
+                logger.debug(f"Response text: {response_text[:500]}")
+                return {"status": "error", "error": f"Failed to parse plan generation response: {str(e)}"}
+            
+            plans = plans_data.get("plans", [])
+            
+            # Validate and structure plans
+            validated_plans = []
+            for plan in plans[:max_plans]:
+                if not plan.get("title") or not plan.get("modules"):
+                    continue
+                
+                modules = []
+                for i, module in enumerate(plan.get("modules", [])):
+                    # Validate content_ids are strings (UUIDs)
+                    content_ids = module.get("content_ids", [])
+                    if content_ids:
+                        # Ensure all content_ids are strings
+                        content_ids = [str(cid) for cid in content_ids if cid]
+                    
+                    modules.append({
+                        "title": module.get("title", f"Module {i+1}"),
+                        "description": module.get("description", ""),
+                        "content_ids": content_ids,
+                        "order_index": module.get("order_index", i),
+                        "estimated_minutes": module.get("estimated_minutes", 45)
+                    })
+                
+                validated_plans.append({
+                    "title": plan.get("title", "Untitled Plan"),
+                    "description": plan.get("description", ""),
+                    "goal": plan.get("goal", ""),
+                    "difficulty": plan.get("difficulty", "Intermediate"),
+                    "category": plan.get("category"),
+                    "category_color": plan.get("category_color", "blue"),
+                    "estimated_time": plan.get("estimated_time", "4 weeks"),
+                    "weeks": plan.get("weeks", 4),
+                    "sessions_per_week": plan.get("sessions_per_week", 3),
+                    "total_modules": plan.get("total_modules", len(modules)),
+                    "module_count": len(modules),
+                    "modules": modules,
+                    "details": {
+                        "source": "planner_agent",
+                        "context_mode": context_mode,
+                        "generated_at": datetime.now().isoformat()
+                    }
+                })
+            
+            result = {
+                "status": "success",
+                "plans": validated_plans,
+                "count": len(validated_plans)
+            }
+            
+            logger.info("generate_learning_plan completed", extra={
+                "user_id": user_id,
+                "plans_generated": len(validated_plans)
+            })
+            
+            return result
+            
+        except Exception as e:
+            logger.exception("generate_learning_plan failed", extra={"user_id": user_id})
+            return {"status": "error", "error": str(e)}

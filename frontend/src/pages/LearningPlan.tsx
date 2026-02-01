@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, ChevronLeft, ChevronRight, Sparkles, Trash2 } from 'lucide-react';
 import LearningPlanCard from '../components/LearningPlanCard';
 import ProposedPlanCard from '../components/ProposedPlanCard';
 import PlanDetailsModal from '../components/PlanDetailsModal';
-import { approveLearningPlan, createLearningPlan, listLearningPlans, listProposedLearningPlans } from '../api/client';
+import { approveLearningPlan, createLearningPlan, listLearningPlans, listProposedLearningPlans, generateSuggestedPlans, pauseLearningPlan, resumeLearningPlan, deleteLearningPlan } from '../api/client';
+import { useNavigate } from 'react-router-dom';
 
 export default function LearningPlan() {
+    const navigate = useNavigate();
     const [userId, setUserId] = useState('');
     const [filter, setFilter] = useState('all');
     const [selectedPlan, setSelectedPlan] = useState<any>(null);
@@ -14,6 +15,8 @@ export default function LearningPlan() {
     const [proposedPlansData, setProposedPlansData] = useState<any[]>([]);
     const [plansData, setPlansData] = useState<any[]>([]);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<string | null>(null);
 
     useEffect(() => {
         const storedUserId = localStorage.getItem('user_id');
@@ -114,6 +117,48 @@ export default function LearningPlan() {
         console.log('Regenerate plan');
     };
 
+    const handlePausePlan = async (planId: string) => {
+        if (!userId) return;
+        try {
+            await pauseLearningPlan(planId, userId);
+            setStatusMessage('Plan paused successfully.');
+            await loadPlans(userId);
+        } catch (error) {
+            console.error('Failed to pause plan', error);
+            setStatusMessage('Failed to pause plan. Please try again.');
+        }
+    };
+
+    const handleResumePlan = async (planId: string) => {
+        if (!userId) return;
+        try {
+            await resumeLearningPlan(planId, userId);
+            setStatusMessage('Plan resumed successfully.');
+            await loadPlans(userId);
+        } catch (error) {
+            console.error('Failed to resume plan', error);
+            setStatusMessage('Failed to resume plan. Please try again.');
+        }
+    };
+
+    const handleEditPlan = (planId: string) => {
+        navigate(`/plans/${planId}`);
+    };
+
+    const handleDeletePlan = async (planId: string) => {
+        if (!userId || !planId) return;
+        try {
+            await deleteLearningPlan(planId, userId);
+            await loadPlans(userId);
+            setDeleteConfirmPlan(null);
+            setStatusMessage('Plan deleted successfully!');
+        } catch (error) {
+            console.error('Failed to delete plan', error);
+            setStatusMessage('Failed to delete plan. Please try again.');
+            setDeleteConfirmPlan(null);
+        }
+    };
+
     const handleCreatePlan = async () => {
         if (!userId) return;
         try {
@@ -123,8 +168,7 @@ export default function LearningPlan() {
                 description: 'Generated from plan page',
                 status: 'active',
                 difficulty: 'Intermediate',
-                category: 'TECH',
-                category_color: 'blue',
+                // Don't set category - let it be inferred from content or remain null
                 estimated_time: '4 weeks',
                 module_count: 6,
                 details: { source: 'plan-page' },
@@ -140,6 +184,25 @@ export default function LearningPlan() {
         }
     };
 
+    const handleGenerateSuggested = async () => {
+        if (!userId || isGenerating) return;
+        setIsGenerating(true);
+        try {
+            const response = await generateSuggestedPlans(userId, 'growth', 3);
+            if (response.status === 'success' && response.plans_generated > 0) {
+                await loadPlans(userId);
+                setStatusMessage(`Successfully generated ${response.plans_generated} suggested plan(s)!`);
+            } else {
+                setStatusMessage('No plans could be generated. Make sure you have content uploaded.');
+            }
+        } catch (error: any) {
+            console.error('Failed to generate suggested plans', error);
+            setStatusMessage(error.response?.data?.detail || 'Failed to generate suggested plans. Please try again.');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
     const normalizeProposedPlan = (plan: any) => ({
         id: plan.id,
         title: plan.title || 'Untitled Plan',
@@ -147,7 +210,7 @@ export default function LearningPlan() {
         estimatedTime: plan.estimated_time || '4 weeks',
         moduleCount: plan.module_count || 8,
         difficulty: (plan.difficulty || 'Intermediate') as 'Beginner' | 'Intermediate' | 'Advanced',
-        category: plan.category || 'TECH',
+        category: plan.category || undefined, // Don't default to 'TECH'
         categoryColor: plan.category_color || 'blue',
     });
 
@@ -160,7 +223,7 @@ export default function LearningPlan() {
         return {
             id: plan.id,
             status: statusMap[plan.status] || 'active',
-            category: plan.category || 'TECH',
+            category: plan.category || undefined, // Don't default to 'TECH'
             categoryColor: plan.category_color || 'blue',
             title: plan.title || 'Untitled Plan',
             goal: plan.goal || undefined,
@@ -202,13 +265,23 @@ export default function LearningPlan() {
                     </p>
                 </div>
 
-                <button
-                    onClick={handleCreatePlan}
-                    className="flex items-center gap-2 px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                >
-                    <Plus className="w-5 h-5" />
-                    Create New Plan
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleGenerateSuggested}
+                        disabled={isGenerating}
+                        className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-trust-blue text-trust-blue rounded-lg hover:bg-blue-50 transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                        <Sparkles className={`w-5 h-5 ${isGenerating ? 'animate-pulse' : ''}`} />
+                        {isGenerating ? 'Generating...' : 'Generate Suggested Plans'}
+                    </button>
+                    <button
+                        onClick={handleCreatePlan}
+                        className="flex items-center gap-2 px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    >
+                        <Plus className="w-5 h-5" />
+                        Create New Plan
+                    </button>
+                </div>
             </div>
 
             {statusMessage && (
@@ -216,6 +289,36 @@ export default function LearningPlan() {
                     {statusMessage}
                 </div>
             )}
+
+            {/* Active Plan Box - Show current active plan prominently */}
+            {(() => {
+                const activePlan = resolvedPlans.find(p => p.status === 'active');
+                if (activePlan) {
+                    // Find the full plan data (with items) for modal
+                    const fullActivePlan = plansData.find(p => p.id === activePlan.id);
+                    return (
+                        <div className="mb-10">
+                            <h2 className="text-xl font-semibold text-gray-900 mb-4">Currently Active Plan</h2>
+                            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-trust-blue shadow-sm">
+                                <LearningPlanCard 
+                                    {...activePlan}
+                                    id={activePlan.id}
+                                    onPause={handlePausePlan}
+                                    onResume={handleResumePlan}
+                                    onViewDetails={() => {
+                                        if (fullActivePlan) {
+                                            handlePlanClick(fullActivePlan, false);
+                                        }
+                                    }}
+                                    onEdit={handleEditPlan}
+                                    onDelete={(planId) => setDeleteConfirmPlan(planId)}
+                                />
+                            </div>
+                        </div>
+                    );
+                }
+                return null;
+            })()}
 
             {resolvedProposedPlans.length > 0 && (
                 <div className="mb-10">
@@ -293,26 +396,35 @@ export default function LearningPlan() {
                     <h3 className="text-xl font-semibold text-gray-900 mb-2">
                         No {filter !== 'all' ? filter : ''} plans yet
                     </h3>
-                    <p className="text-gray-600 mb-6">
-                        Create your first learning plan to get started
+                    <p className="text-gray-600">
+                        Use the "Create New Plan" button above to get started
                     </p>
-                    <button
-                        onClick={handleCreatePlan}
-                        className="px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-                    >
-                        Create Plan
-                    </button>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredPlans.map((plan, index) => {
-                        const planId = (plan as { id?: string }).id;
-                        return (
-                            <Link key={planId || index} to={`/plans/${planId || index + 1}`}>
-                                <LearningPlanCard {...plan} />
-                            </Link>
-                        );
-                    })}
+                    {filteredPlans
+                        .filter(plan => {
+                            // If filter is 'all' and we're showing active plan in featured box, exclude it from grid to avoid duplication
+                            if (filter === 'all' && plan.status === 'active' && resolvedPlans.some(p => p.status === 'active')) {
+                                return false;
+                            }
+                            return true;
+                        })
+                        .map((plan, index) => {
+                            const planId = (plan as { id?: string }).id;
+                            return (
+                                <div key={planId || index} className="group">
+                                    <LearningPlanCard 
+                                        {...plan} 
+                                        id={planId}
+                                        onPause={handlePausePlan}
+                                        onResume={handleResumePlan}
+                                        onEdit={handleEditPlan}
+                                        onDelete={(planId) => setDeleteConfirmPlan(planId)}
+                                    />
+                                </div>
+                            );
+                        })}
                 </div>
             )}
 
@@ -325,6 +437,33 @@ export default function LearningPlan() {
                     onCustomize={handleCustomize}
                     onRegenerate={handleRegenerate}
                 />
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmPlan && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+                        <h3 className="text-xl font-bold text-gray-900 mb-2">Delete Learning Plan</h3>
+                        <p className="text-gray-600 mb-6">
+                            Are you sure you want to delete this plan? This action cannot be undone and will delete all associated modules and progress.
+                        </p>
+                        <div className="flex items-center gap-3 justify-end">
+                            <button
+                                onClick={() => setDeleteConfirmPlan(null)}
+                                className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleDeletePlan(deleteConfirmPlan)}
+                                className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
+                            >
+                                Delete Plan
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

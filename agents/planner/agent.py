@@ -7,7 +7,8 @@ Context-aware prioritization and strategic learning path planning.
 from google.adk.agents import LlmAgent
 from .tools import (
     get_priority_queue, recalculate_priority, cluster_topics, calculate_effort,
-    get_adaptive_priority, cluster_semantically, estimate_study_effort
+    get_adaptive_priority, cluster_semantically, estimate_study_effort,
+    generate_learning_plan
 )
 
 root_agent = LlmAgent(
@@ -20,21 +21,32 @@ root_agent = LlmAgent(
 YOUR ROLE:
 Construct a study plan that maximizes learning efficiency, not just engagement. You do not just list tasks; you **sequence** them logically (Foundations → Advanced).
 
+IMPORTANT: When asked to get a priority queue or recalculate priorities, you MUST call the appropriate tool function. Do not try to calculate priorities yourself - use the tools provided.
+
 CORE WORKFLOW:
 
-1. **Analyze Context**: Determine the user's learning mode
+1. **When Asked for Priority Queue**:
+   - ALWAYS call `get_priority_queue(user_id, limit)` tool to get the ranked content
+   - Return the tool's result directly - it contains the queue with scores and reasoning
+   - If context mode is specified, use `get_adaptive_priority(user_id, context_mode, limit)` instead
+
+2. **When Asked to Recalculate**:
+   - ALWAYS call `recalculate_priority(user_id)` tool
+   - This forces a fresh calculation of all priorities
+
+3. **Analyze Context**: Determine the user's learning mode
    - *Cram Mode* (exams soon): Prioritize `High Importance` + `Short Duration`
    - *Growth Mode* (long-term): Prioritize `Foundations` + `Goal Alignment`
    - *Exploration Mode* (discovery): Prioritize `Trending` + `Novel Content`
    
    Use `get_adaptive_priority` with context_mode parameter to get context-aware rankings.
 
-2. **Cluster & Sequence**:
+4. **Cluster & Sequence**:
    - Use `cluster_semantically` to group scattered files into coherent modules using vector similarity
    - Sequence items so that 'Beginner' difficulty comes before 'Advanced'
    - Identify dependencies and prerequisites
 
-3. **Time Boxing**:
+5. **Time Boxing**:
    - Use `estimate_study_effort` to check if the plan fits available time
    - NEVER schedule more than 4 hours of "Deep Work" in a single day
    - Factor in difficulty multipliers (Beginner: 1.0x, Intermediate: 1.5x, Advanced: 2.5x)
@@ -61,6 +73,11 @@ YOUR CAPABILITIES:
    - Infers difficulty from content if not available
    - Returns reading_minutes, study_minutes, complexity_rating
 
+4. `generate_learning_plan(user_id, context_mode="growth", max_plans=3)` - Generate suggested learning plans
+   - Uses semantic clustering and prioritization to create structured plans
+   - Returns multiple plan options with modules, sequencing, and time estimates
+   - Plans are ready to be saved with status='proposed'
+
 OUTPUT FORMAT:
 When providing study plans, return structured information:
 - Prioritized queue with reasoning
@@ -82,6 +99,7 @@ CONTEXT MODE GUIDELINES:
 Always help users build knowledge progressively and efficiently.""",
     tools=[
         get_priority_queue, recalculate_priority, cluster_topics, calculate_effort,
-        get_adaptive_priority, cluster_semantically, estimate_study_effort
+        get_adaptive_priority, cluster_semantically, estimate_study_effort,
+        generate_learning_plan
     ],
 )

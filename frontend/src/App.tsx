@@ -10,6 +10,7 @@ import StudySession from './pages/StudySession';
 import PlanDetail from './pages/PlanDetail';
 import SignUp from './pages/SignUp';
 import MaterialDetail from './pages/MaterialDetail';
+import ContentDetail from './pages/ContentDetail';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isAuthenticated = localStorage.getItem('isAuthenticated');
@@ -65,6 +66,7 @@ function App() {
               <Route path="/bank" element={<KnowledgeBank />} />
               <Route path="/notes/:id" element={<NoteDetail />} />
               <Route path="/materials/:id" element={<MaterialDetail />} />
+              <Route path="/content/:id" element={<ContentDetail />} />
               <Route path="/session/:sessionId" element={<StudySession />} />
             </Routes>
           </Layout>
