@@ -146,6 +146,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 if (typeof payload.unread_count === 'number') {
                     setUnreadCount(payload.unread_count);
                 }
+                if (incoming.some((item: any) => item?.data?.status === 'ready')) {
+                    window.dispatchEvent(new CustomEvent('notifications:ready'));
+                }
             } catch (error) {
                 console.error('Failed to parse notification stream', error);
             }

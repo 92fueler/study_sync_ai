@@ -75,6 +75,17 @@ export default function KnowledgeBank() {
         void loadNotes(userId);
     }, [userId]);
 
+    useEffect(() => {
+        if (!userId) return;
+        const handler = () => {
+            void loadNotes(userId);
+        };
+        window.addEventListener('notifications:ready', handler);
+        return () => {
+            window.removeEventListener('notifications:ready', handler);
+        };
+    }, [userId]);
+
     const formatTimestamp = (value?: string | null) => {
         if (!value) return 'just now';
         const date = new Date(value);
