@@ -128,7 +128,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         if (notificationsStreamRef.current) {
             notificationsStreamRef.current.close();
         }
-        const sseUrl = `${API_BASE_URL.replace(/\\/$/, '')}/notifications/stream?user_id=${userId}`;
+        const sseUrl = `${API_BASE_URL.replace(/\/$/, '')}/notifications/stream?user_id=${userId}`;
         const stream = new EventSource(sseUrl, { withCredentials: false });
         notificationsStreamRef.current = stream;
 
