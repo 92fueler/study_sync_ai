@@ -16,6 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+    const notificationsPollRef = useRef<number | null>(null);
 
     const isActive = (path: string) => location.pathname === path;
 
@@ -30,17 +31,33 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         setUserId(tempUserId);
     }, []);
 
+    const loadBadge = async () => {
+        if (!userId) return;
+        try {
+            const response = await getNotificationBadge(userId);
+            setUnreadCount(response.unread_count || 0);
+        } catch (error) {
+            console.error('Failed to load notification badge', error);
+            setUnreadCount(0);
+        }
+    };
+
+    const loadNotifications = async () => {
+        if (!userId) return;
+        setIsLoadingNotifications(true);
+        try {
+            const response = await getNotifications(userId);
+            setNotifications(response.notifications || []);
+        } catch (error) {
+            console.error('Failed to load notifications', error);
+            setNotifications([]);
+        } finally {
+            setIsLoadingNotifications(false);
+        }
+    };
+
     useEffect(() => {
         if (!userId) return;
-        const loadBadge = async () => {
-            try {
-                const response = await getNotificationBadge(userId);
-                setUnreadCount(response.unread_count || 0);
-            } catch (error) {
-                console.error('Failed to load notification badge', error);
-                setUnreadCount(0);
-            }
-        };
         void loadBadge();
     }, [userId]);
 
@@ -101,20 +118,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (!isNotificationsOpen || !userId) return;
-        const loadNotifications = async () => {
-            setIsLoadingNotifications(true);
-            try {
-                const response = await getNotifications(userId);
-                setNotifications(response.notifications || []);
-            } catch (error) {
-                console.error('Failed to load notifications', error);
-                setNotifications([]);
-            } finally {
-                setIsLoadingNotifications(false);
-            }
-        };
         void loadNotifications();
     }, [isNotificationsOpen, userId]);
+
+    useEffect(() => {
+        if (!userId) return;
+        if (notificationsPollRef.current) {
+            window.clearInterval(notificationsPollRef.current);
+        }
+        const poll = () => {
+            void loadBadge();
+            if (isNotificationsOpen) {
+                void loadNotifications();
+            }
+        };
+        poll();
+        notificationsPollRef.current = window.setInterval(poll, 5000);
+        return () => {
+            if (notificationsPollRef.current) {
+                window.clearInterval(notificationsPollRef.current);
+                notificationsPollRef.current = null;
+            }
+        };
+    }, [userId, isNotificationsOpen]);
 
     return (
         <div className="min-h-screen bg-gray-50">
