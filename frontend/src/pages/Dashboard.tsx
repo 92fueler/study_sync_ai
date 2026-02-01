@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { FileText, Link as LinkIcon, FileUp, Paperclip, Mic, Sparkles, ArrowRight } from 'lucide-react';
 import LearningPlanCard from '../components/LearningPlanCard';
 import LearningNoteCard from '../components/LearningNoteCard';
-import { createIngestionJob, createNote, listArtifacts, listLearningPlans, uploadFiles } from '../api/client';
+import { API_BASE_URL, createIngestionJob, createNote, listArtifacts, listLearningPlans, uploadFiles } from '../api/client';
 
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('raw-notes');
@@ -15,6 +15,7 @@ export default function Dashboard() {
     const [activePlans, setActivePlans] = useState<any[]>([]);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+    const notificationsStreamRef = useRef<EventSource | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
     const messageTimerRef = useRef<number | null>(null);
@@ -69,6 +70,34 @@ export default function Dashboard() {
     useEffect(() => {
         if (!userId) return;
         void loadData(userId);
+    }, [userId]);
+
+    useEffect(() => {
+        if (!userId) return;
+        if (notificationsStreamRef.current) {
+            notificationsStreamRef.current.close();
+        }
+        const sseUrl = `${API_BASE_URL.replace(/\/$/, '')}/notifications/stream?user_id=${userId}`;
+        const stream = new EventSource(sseUrl);
+        notificationsStreamRef.current = stream;
+
+        stream.addEventListener('notifications', (event) => {
+            try {
+                const payload = JSON.parse((event as MessageEvent).data || '{}');
+                const incoming = Array.isArray(payload.notifications) ? payload.notifications : [];
+                const hasReady = incoming.some((item: any) => item?.data?.status === 'ready');
+                if (hasReady) {
+                    void loadData(userId);
+                }
+            } catch (error) {
+                console.error('Failed to parse notification stream', error);
+            }
+        });
+
+        return () => {
+            stream.close();
+            notificationsStreamRef.current = null;
+        };
     }, [userId]);
 
     const formatTimestamp = (value?: string | null) => {
