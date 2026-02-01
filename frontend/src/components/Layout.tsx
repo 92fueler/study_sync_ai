@@ -158,8 +158,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         return merged;
                     });
                 }
-                if (typeof payload.unread_count === 'number') {
-                    setUnreadCount(payload.unread_count);
+                if (payload.unread_count !== undefined && payload.unread_count !== null) {
+                    const count = typeof payload.unread_count === 'number'
+                        ? payload.unread_count
+                        : Number(payload.unread_count);
+                    if (!Number.isNaN(count)) {
+                        setUnreadCount(count);
+                    }
+                } else if (incoming.length) {
+                    const unreadDelta = incoming.filter((item: any) => item?.read === false).length;
+                    if (unreadDelta > 0) {
+                        setUnreadCount((prev) => prev + unreadDelta);
+                    }
                 }
                 if (incoming.some((item: any) => item?.data?.status === 'ready')) {
                     window.dispatchEvent(new CustomEvent('notifications:ready'));
