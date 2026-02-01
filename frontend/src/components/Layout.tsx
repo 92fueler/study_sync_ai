@@ -42,12 +42,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const normalizeNotification = (item: any) => {
+        if (!item) return item;
+        const data = typeof item.data === 'string' ? safeParseJson(item.data) : item.data;
+        return { ...item, data };
+    };
+
+    const safeParseJson = (value: string) => {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return null;
+        }
+    };
+
     const loadNotifications = async () => {
         if (!userId) return;
         setIsLoadingNotifications(true);
         try {
             const response = await getNotifications(userId);
-            setNotifications(response.notifications || []);
+            const items = Array.isArray(response.notifications) ? response.notifications : [];
+            setNotifications(items.map((item: any) => normalizeNotification(item)));
         } catch (error) {
             console.error('Failed to load notifications', error);
             setNotifications([]);
@@ -135,7 +150,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         stream.addEventListener('notifications', (event) => {
             try {
                 const payload = JSON.parse((event as MessageEvent).data || '{}');
-                const incoming = Array.isArray(payload.notifications) ? payload.notifications : [];
+                const incoming = Array.isArray(payload.notifications) ? payload.notifications.map((item: any) => normalizeNotification(item)) : [];
                 if (incoming.length) {
                     setNotifications((prev) => {
                         const seen = new Set(prev.map((item: any) => item.id));
