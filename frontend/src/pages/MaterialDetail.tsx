@@ -68,7 +68,12 @@ export default function MaterialDetail() {
             components={{
               code({ className, children, ...props }) {
                 const match = /language-(\w+)/.exec(className || '');
-                const codeString = String(children).replace(/\n$/, '');
+                // Extract code string and clean it up
+                let codeString = String(children);
+                // Remove trailing newlines
+                codeString = codeString.replace(/\n+$/, '');
+                // Remove leading newlines
+                codeString = codeString.replace(/^\n+/, '');
                 const isInline = !className || !match;
                 
                 if (!isInline && match && match[1] === 'mermaid') {
