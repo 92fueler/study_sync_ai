@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type mermaid from 'mermaid'
 
 interface MermaidProps {
   chart: string
@@ -6,7 +7,7 @@ interface MermaidProps {
 
 export default function Mermaid({ chart }: MermaidProps) {
   const ref = useRef<HTMLDivElement>(null)
-  const mermaidRef = useRef<any>(null)
+  const mermaidRef = useRef<typeof mermaid | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
@@ -14,9 +15,22 @@ export default function Mermaid({ chart }: MermaidProps) {
     let cancelled = false
     const loadMermaid = async () => {
       try {
-        const mod = await import('mermaid/dist/mermaid.js')
-        const instance = (mod as { default?: any }).default ?? mod
+        // Try standard import first
+        const mermaidModule = await import('mermaid')
+        // Handle different export formats
+        const instance = 
+          mermaidModule.default || 
+          (mermaidModule as any).mermaid || 
+          mermaidModule
+        
         if (cancelled || !instance) return
+        
+        // Check if initialize method exists
+        if (typeof instance.initialize !== 'function') {
+          console.error('Mermaid instance does not have initialize method', instance)
+          return
+        }
+        
         mermaidRef.current = instance
         instance.initialize({
           startOnLoad: false,
@@ -30,6 +44,10 @@ export default function Mermaid({ chart }: MermaidProps) {
         setIsInitialized(true)
       } catch (error) {
         console.error('Mermaid load error:', error)
+        console.error('Error details:', {
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        })
       }
     }
     void loadMermaid()

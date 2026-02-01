@@ -66,12 +66,14 @@ async def upload_files(
         task_id = str(uuid.uuid4())
         
         # Send to ADK Ingestion Agent with natural language message
+        # Note: Pass full content_text to the tool - don't truncate here
+        # The ingestion agent will handle large content appropriately
         message = f"""Please ingest this content using the ingest_content tool:
 - user_id: {user_id}
 - content_hash: {content_hash}
 - filename: {file.filename}
 - media_type: {media_type}
-- content_text: {content_text[:10000]}"""
+- content_text: {content_text}"""
         
         response = await a2a_client.run_agent(
             agent_name="ingestion",
@@ -95,9 +97,29 @@ async def upload_files(
             })
         else:
             # Extract content_id from response for proactive generation
+            # Agent returns JSON in text field, need to parse it
             content_id = None
             if isinstance(response.result, dict):
+                # Try direct access first
                 content_id = response.result.get("content_id")
+                
+                # If not found, try parsing text field which contains JSON
+                if not content_id and "text" in response.result:
+                    try:
+                        import json
+                        import re
+                        text = response.result["text"]
+                        # Extract JSON from markdown code blocks if present
+                        json_match = re.search(r'```json\s*(\{.*?\})\s*```', text, re.DOTALL)
+                        if json_match:
+                            parsed = json.loads(json_match.group(1))
+                            content_id = parsed.get("content_id")
+                        else:
+                            # Try parsing entire text as JSON
+                            parsed = json.loads(text)
+                            content_id = parsed.get("content_id")
+                    except (json.JSONDecodeError, AttributeError, KeyError):
+                        pass
             
             results.append({
                 "filename": file.filename,

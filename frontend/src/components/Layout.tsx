@@ -155,8 +155,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 const incoming = Array.isArray(payload.notifications) ? payload.notifications.map((item: any) => normalizeNotification(item)) : [];
                 if (incoming.length) {
                     setNotifications((prev) => {
-                        const seen = new Set(prev.map((item: any) => item.id));
-                        const newItems = incoming.filter((item: any) => !seen.has(item.id));
+                        // Create a set of existing IDs and created_at timestamps for deduplication
+                        const seenIds = new Set(prev.map((item: any) => item.id).filter(Boolean));
+                        const seenTimestamps = new Set(prev.map((item: any) => item.created_at).filter(Boolean));
+                        const newItems = incoming.filter((item: any) => {
+                            if (item.id) {
+                                return !seenIds.has(item.id);
+                            }
+                            if (item.created_at) {
+                                return !seenTimestamps.has(item.created_at);
+                            }
+                            // If no ID or timestamp, allow it (shouldn't happen in practice)
+                            return true;
+                        });
                         if (newItems.length) {
                             const now = Date.now();
                             const recent = newItems.filter((item: any) => {
@@ -164,7 +175,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                 return Number.isNaN(created) || now - created < 15_000;
                             });
                             if (recent.length) {
-                                setToastQueue((prevQueue) => [...recent, ...prevQueue].slice(0, 3));
+                                setToastQueue((prevQueue) => {
+                                    // Deduplicate by ID or created_at
+                                    const seenIds = new Set(prevQueue.map((item: any) => item.id).filter(Boolean));
+                                    const seenTimestamps = new Set(prevQueue.map((item: any) => item.created_at).filter(Boolean));
+                                    const uniqueRecent = recent.filter((item: any) => {
+                                        if (item.id) {
+                                            return !seenIds.has(item.id);
+                                        }
+                                        if (item.created_at) {
+                                            return !seenTimestamps.has(item.created_at);
+                                        }
+                                        return true;
+                                    });
+                                    return [...uniqueRecent, ...prevQueue].slice(0, 3);
+                                });
                             }
                             if (toastTimerRef.current) {
                                 window.clearTimeout(toastTimerRef.current);
@@ -173,8 +198,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                 setToastQueue([]);
                             }, 4000);
                         }
-                        const merged = [...newItems, ...prev];
-                        return merged;
+                        // Final deduplication: prioritize ID, fallback to created_at
+                        const allItems = [...newItems, ...prev];
+                        const uniqueMap = new Map<string, any>();
+                        allItems.forEach((item: any) => {
+                            if (item.id) {
+                                // Prefer items with IDs, and only add if not already present
+                                if (!uniqueMap.has(item.id)) {
+                                    uniqueMap.set(item.id, item);
+                                }
+                            } else if (item.created_at) {
+                                // For items without ID, use created_at as key
+                                // But only if we haven't already seen this timestamp
+                                if (!uniqueMap.has(item.created_at)) {
+                                    uniqueMap.set(item.created_at, item);
+                                }
+                            }
+                            // Items without both id and created_at are skipped (shouldn't happen)
+                        });
+                        return Array.from(uniqueMap.values());
                     });
                 }
                 if (payload.unread_count !== undefined && payload.unread_count !== null) {
@@ -216,9 +258,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="min-h-screen bg-gray-50">
             {toastQueue.length > 0 && (
                 <div className="fixed top-20 right-6 z-[60] space-y-2">
-                    {toastQueue.map((item: any) => (
+                    {toastQueue.map((item: any, index: number) => (
                         <div
-                            key={item.id || item.created_at}
+                            key={`toast-${item.id || item.created_at || index}-${index}`}
                             className="bg-white border border-gray-200 shadow-lg rounded-xl px-4 py-3 w-80"
                         >
                             <div className="text-xs text-gray-400 uppercase font-semibold">
@@ -340,9 +382,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                             <div className="mt-3 max-h-80 overflow-y-auto">
                                 {searchResults.length > 0 ? (
                                     <div className="space-y-2">
-                                        {searchResults.map((item) => (
+                                        {searchResults.map((item, index) => (
                                             <Link
-                                                key={`${item.type}-${item.id}`}
+                                                key={`search-${item.type}-${item.id || index}-${index}`}
                                                 to={item.type === 'plan' ? `/plans/${item.id}` : `/notes/${item.id}`}
                                                 onClick={handleSearchClose}
                                                 className="block rounded-lg border border-gray-100 hover:border-trust-blue/40 hover:bg-blue-50/40 transition-colors p-3"
@@ -407,11 +449,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                             <div className="text-xs text-gray-500 py-6 text-center">No notifications</div>
                         ) : (
                             <div className="space-y-2 max-h-80 overflow-y-auto">
-                                {notifications.map((item) => {
+                                {notifications.map((item, index) => {
                                     const status = item?.data?.status;
                                     return (
                                     <button
-                                        key={item.id || item.created_at}
+                                        key={`notification-${item.id || item.created_at || index}-${index}`}
                                         className="w-full text-left rounded-lg border border-gray-100 hover:border-trust-blue/40 hover:bg-blue-50/40 transition-colors p-3"
                                         onClick={async () => {
                                             if (item.id) {

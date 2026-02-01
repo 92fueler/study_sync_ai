@@ -19,6 +19,22 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+// Response interceptor for better error handling
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      console.error(
+        'Backend connection failed. Make sure the gateway is running:\n' +
+        '  docker-compose up -d gateway\n' +
+        '  or\n' +
+        '  ./scripts/startup/start-backend.sh'
+      )
+    }
+    return Promise.reject(error)
+  }
+)
+
 export default apiClient
 
 // API endpoints

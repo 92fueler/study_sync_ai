@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { getArtifact } from '../api/client';
+import Mermaid from '../components/Mermaid';
 
 export default function MaterialDetail() {
   const { id } = useParams<{ id: string }>();
@@ -59,8 +62,91 @@ export default function MaterialDetail() {
         <h1 className="text-2xl font-semibold text-gray-900 mb-3">
           Generated Material
         </h1>
-        <div className="prose max-w-none text-gray-700 whitespace-pre-line">
-          {material.content || 'No content available.'}
+        <div className="max-w-none text-gray-700">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              code({ className, children, ...props }) {
+                const match = /language-(\w+)/.exec(className || '');
+                const codeString = String(children).replace(/\n$/, '');
+                const isInline = !className || !match;
+                
+                if (!isInline && match && match[1] === 'mermaid') {
+                  return <Mermaid chart={codeString} />;
+                }
+                
+                return (
+                  <code className={className} {...props}>
+                    {children}
+                  </code>
+                );
+              },
+              h1: ({ ...props }) => (
+                <h1 className="text-3xl font-bold mt-8 mb-4 text-gray-900" {...props} />
+              ),
+              h2: ({ ...props }) => (
+                <h2 className="text-2xl font-semibold mt-6 mb-3 text-gray-900" {...props} />
+              ),
+              h3: ({ ...props }) => (
+                <h3 className="text-xl font-semibold mt-4 mb-2 text-gray-900" {...props} />
+              ),
+              h4: ({ ...props }) => (
+                <h4 className="text-lg font-semibold mt-3 mb-2 text-gray-900" {...props} />
+              ),
+              p: ({ ...props }) => (
+                <p className="mb-4 leading-relaxed" {...props} />
+              ),
+              ul: ({ ...props }) => (
+                <ul className="list-disc list-inside mb-4 space-y-2 ml-4" {...props} />
+              ),
+              ol: ({ ...props }) => (
+                <ol className="list-decimal list-inside mb-4 space-y-2 ml-4" {...props} />
+              ),
+              li: ({ ...props }) => (
+                <li className="mb-1" {...props} />
+              ),
+              blockquote: ({ ...props }) => (
+                <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4 text-gray-600" {...props} />
+              ),
+              a: ({ ...props }) => (
+                <a className="text-trust-blue hover:text-blue-700 underline" {...props} />
+              ),
+              strong: ({ ...props }) => (
+                <strong className="font-semibold" {...props} />
+              ),
+              em: ({ ...props }) => (
+                <em className="italic" {...props} />
+              ),
+              hr: ({ ...props }) => (
+                <hr className="my-6 border-gray-300" {...props} />
+              ),
+              pre: ({ ...props }) => (
+                <pre className="bg-gray-100 rounded-lg p-4 overflow-x-auto mb-4" {...props} />
+              ),
+              table: ({ ...props }) => (
+                <div className="overflow-x-auto mb-4">
+                  <table className="min-w-full border-collapse border border-gray-300" {...props} />
+                </div>
+              ),
+              thead: ({ ...props }) => (
+                <thead className="bg-gray-100" {...props} />
+              ),
+              tbody: ({ ...props }) => (
+                <tbody {...props} />
+              ),
+              tr: ({ ...props }) => (
+                <tr className="border-b border-gray-300" {...props} />
+              ),
+              th: ({ ...props }) => (
+                <th className="border border-gray-300 px-4 py-2 text-left font-semibold" {...props} />
+              ),
+              td: ({ ...props }) => (
+                <td className="border border-gray-300 px-4 py-2" {...props} />
+              ),
+            }}
+          >
+            {material.content || 'No content available.'}
+          </ReactMarkdown>
         </div>
       </div>
     </div>

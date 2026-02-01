@@ -22,13 +22,11 @@ if ! docker-compose ps redis supabase | grep -q "Up"; then
     sleep 3
 fi
 
-# Start agents/workers if not running
-if ! docker-compose ps profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent notification-worker generation-worker priority-worker | grep -q "Up"; then
-    echo "Starting agents/workers (ingestion, profile, planner, synthesis, orchestrator, notification, generation, priority)..."
-    docker-compose up -d profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent notification-worker generation-worker priority-worker
-    echo "Waiting for agents..."
-    sleep 3
-fi
+# Rebuild and start agents/workers (always rebuild in dev mode to pick up code changes)
+echo "Rebuilding and starting agents/workers (ingestion, profile, planner, synthesis, orchestrator, notification, generation, priority)..."
+docker-compose up -d --build profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent notification-worker generation-worker priority-worker
+echo "Waiting for agents..."
+sleep 3
 
 # Check if virtual environment exists
 if [ -d ".venv" ]; then

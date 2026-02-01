@@ -146,7 +146,6 @@ study_sync_ai/
 
 | Document | Purpose |
 |---------|---------|
-| [USER_GUIDE.md](./USER_GUIDE.md) | Complete user guide with API endpoints and workflows |
 | [docs/DESIGN.md](./docs/DESIGN.md) | System architecture and design principles |
 | [docs/README.md](./docs/README.md) | Technical documentation index |
 | [frontend/README.md](./frontend/README.md) | Frontend-specific documentation |
@@ -220,7 +219,7 @@ pip install -r gateway/requirements.txt
 
 ## 🔗 API Endpoints
 
-Key endpoints (see [USER_GUIDE.md](./USER_GUIDE.md) for complete list):
+Key endpoints:
 
 - `POST /api/v1/upload` - Upload files for processing
 - `GET /api/v1/artifacts` - List user artifacts
@@ -245,4 +244,3 @@ Key endpoints (see [USER_GUIDE.md](./USER_GUIDE.md) for complete list):
 - **React Router** - Navigation
 - **Mermaid.js** - Diagram rendering
 - **Axios** - API client
-

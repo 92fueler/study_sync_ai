@@ -26,6 +26,8 @@ fi
 echo "=== Starting Full Stack Development Environment ==="
 echo "Creating tmux session: $SESSION_NAME"
 echo ""
+echo "Note: Docker containers will be rebuilt to pick up code changes"
+echo ""
 echo "Commands:"
 echo "  Ctrl+B then D  - Detach from session"
 echo "  Ctrl+B then X  - Kill current pane"
