@@ -18,6 +18,7 @@ export default function KnowledgeBank() {
     const [selectedStyle, setSelectedStyle] = useState<string>('all');
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [materials, setMaterials] = useState<any[]>([]);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messageTimerRef = useRef<number | null>(null);
 
@@ -235,7 +236,8 @@ export default function KnowledgeBank() {
                                 const files = event.target.files ? Array.from(event.target.files) : [];
                                 if (!files.length || !userId) return;
                                 try {
-                                    const response = await uploadFiles(userId, files);
+                                    setUploadProgress(0);
+                                    const response = await uploadFiles(userId, files, (percent) => setUploadProgress(percent));
                                     if (response?.results) {
                                         await Promise.all(
                                             response.results.map((item: any) => createIngestionJob({
@@ -254,10 +256,25 @@ export default function KnowledgeBank() {
                                     console.error('Knowledge bank upload failed', error);
                                     showStatus('Upload failed. Please try again.');
                                 } finally {
+                                    setUploadProgress(null);
                                     event.target.value = '';
                                 }
                             }}
                         />
+                        {uploadProgress !== null && (
+                            <div className="mb-4 w-full max-w-md">
+                                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                    <span>Uploading</span>
+                                    <span>{uploadProgress}%</span>
+                                </div>
+                                <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-trust-blue transition-all"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             className="px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"

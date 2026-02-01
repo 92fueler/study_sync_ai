@@ -22,7 +22,11 @@ apiClient.interceptors.request.use((config) => {
 export default apiClient
 
 // API endpoints
-export const uploadFiles = async (userId: string, files: File[]) => {
+export const uploadFiles = async (
+  userId: string,
+  files: File[],
+  onProgress?: (percent: number) => void
+) => {
   const formData = new FormData()
   formData.append('user_id', userId)
   files.forEach((file) => {
@@ -32,6 +36,11 @@ export const uploadFiles = async (userId: string, files: File[]) => {
   const response = await apiClient.post('/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
+    },
+    onUploadProgress: (event) => {
+      if (!onProgress || !event.total) return
+      const percent = Math.min(100, Math.round((event.loaded / event.total) * 100))
+      onProgress(percent)
     },
   })
   return response.data

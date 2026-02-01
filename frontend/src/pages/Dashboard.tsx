@@ -14,6 +14,7 @@ export default function Dashboard() {
     const [recentMaterials, setRecentMaterials] = useState<any[]>([]);
     const [activePlans, setActivePlans] = useState<any[]>([]);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
     const messageTimerRef = useRef<number | null>(null);
@@ -120,7 +121,8 @@ export default function Dashboard() {
         const files = event.target.files ? Array.from(event.target.files) : [];
         if (!files.length || !userId) return;
         try {
-            const response = await uploadFiles(userId, files);
+            setUploadProgress(0);
+            const response = await uploadFiles(userId, files, (percent) => setUploadProgress(percent));
             if (response?.results) {
                 await Promise.all(
                     response.results.map((item: any) => {
@@ -159,6 +161,8 @@ export default function Dashboard() {
         } catch (error) {
             console.error('Upload failed', error);
             showStatus('Upload failed. Please try again.');
+        } finally {
+            setUploadProgress(null);
         }
         event.target.value = '';
     };
@@ -167,7 +171,8 @@ export default function Dashboard() {
         const files = event.target.files ? Array.from(event.target.files) : [];
         if (!files.length || !userId) return;
         try {
-            const response = await uploadFiles(userId, files);
+            setUploadProgress(0);
+            const response = await uploadFiles(userId, files, (percent) => setUploadProgress(percent));
             if (response?.results) {
                 await Promise.all(
                     response.results.map((item: any) => createIngestionJob({
@@ -202,6 +207,8 @@ export default function Dashboard() {
         } catch (error) {
             console.error('Audio upload failed', error);
             showStatus('Audio upload failed. Please try again.');
+        } finally {
+            setUploadProgress(null);
         }
         event.target.value = '';
     };
@@ -348,6 +355,20 @@ export default function Dashboard() {
                             {isSubmitting ? 'Generating...' : 'Generate Structure'}
                         </button>
                     </div>
+                    {uploadProgress !== null && (
+                        <div className="mt-3">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                <span>Uploading</span>
+                                <span>{uploadProgress}%</span>
+                            </div>
+                            <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-trust-blue transition-all"
+                                    style={{ width: `${uploadProgress}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
