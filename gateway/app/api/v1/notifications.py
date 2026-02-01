@@ -79,8 +79,17 @@ async def mark_as_read(notification_id: str, user_id: str = Query("system")):
 
 
 def _sse_event(event: str, data: Dict[str, Any]) -> str:
-    payload = json.dumps(data)
+    payload = json.dumps(data, default=str)
     return f"event: {event}\ndata: {payload}\n\n"
+
+
+def _serialize_notification(row: Dict[str, Any]) -> Dict[str, Any]:
+    serialized = dict(row)
+    for key in ("created_at", "sent_at"):
+        value = serialized.get(key)
+        if isinstance(value, datetime):
+            serialized[key] = value.isoformat()
+    return serialized
 
 
 @router.get("/stream")
@@ -109,7 +118,7 @@ async def stream_notifications(user_id: str = Query(...)):
                         """,
                         user_id,
                     )
-                    notifications: List[Dict[str, Any]] = [dict(row) for row in rows]
+                    notifications: List[Dict[str, Any]] = [_serialize_notification(dict(row)) for row in rows]
                     if notifications:
                         last_seen = notifications[0]["created_at"]
                     yield _sse_event(
@@ -131,7 +140,7 @@ async def stream_notifications(user_id: str = Query(...)):
                         last_seen,
                     )
                     if rows:
-                        notifications = [dict(row) for row in rows]
+                        notifications = [_serialize_notification(dict(row)) for row in rows]
                         last_seen = notifications[0]["created_at"]
                         badge_row = await fetchrow(
                             """
@@ -153,8 +162,8 @@ async def stream_notifications(user_id: str = Query(...)):
                 await asyncio.sleep(5)
             except asyncio.CancelledError:
                 break
-            except Exception:
-                yield _sse_event("error", {"message": "stream_error"})
+            except Exception as exc:
+                yield _sse_event("error", {"message": "stream_error", "detail": str(exc)})
                 await asyncio.sleep(5)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
