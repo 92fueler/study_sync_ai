@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -22,7 +22,11 @@ apiClient.interceptors.request.use((config) => {
 export default apiClient
 
 // API endpoints
-export const uploadFiles = async (userId: string, files: File[]) => {
+export const uploadFiles = async (
+  userId: string,
+  files: File[],
+  onProgress?: (percent: number) => void
+) => {
   const formData = new FormData()
   formData.append('user_id', userId)
   files.forEach((file) => {
@@ -32,6 +36,11 @@ export const uploadFiles = async (userId: string, files: File[]) => {
   const response = await apiClient.post('/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
+    },
+    onUploadProgress: (event) => {
+      if (!onProgress || !event.total) return
+      const percent = Math.min(100, Math.round((event.loaded / event.total) * 100))
+      onProgress(percent)
     },
   })
   return response.data
@@ -85,6 +94,21 @@ export const getNotificationBadge = async (userId: string) => {
 
 export const markNotificationRead = async (notificationId: string, userId: string) => {
   const response = await apiClient.post(`/notifications/${notificationId}/read?user_id=${userId}`)
+  return response.data
+}
+
+export const getGoogleCalendarAuthUrl = async (userId: string) => {
+  const response = await apiClient.get(`/calendar/google/auth-url?user_id=${userId}`)
+  return response.data
+}
+
+export const syncGoogleCalendar = async (payload: {
+  user_id: string
+  time_min?: string
+  time_max?: string
+  calendar_id?: string
+}) => {
+  const response = await apiClient.post(`/calendar/google/sync`, payload)
   return response.data
 }
 
@@ -190,6 +214,23 @@ export const createLearningPlan = async (payload: {
 
 export const getLearningPlan = async (planId: string, userId: string) => {
   const response = await apiClient.get(`/learning-plans/${planId}?user_id=${userId}&include_items=true`)
+  return response.data
+}
+
+export const updateLearningPlan = async (planId: string, userId: string, payload: {
+  title?: string
+  description?: string
+  goal?: string
+  status?: string
+  difficulty?: string
+  category?: string
+  category_color?: string
+  estimated_time?: string
+  module_count?: number
+  details?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+}) => {
+  const response = await apiClient.patch(`/learning-plans/${planId}?user_id=${userId}`, payload)
   return response.data
 }
 

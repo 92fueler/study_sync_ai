@@ -20,6 +20,7 @@ const SECTIONS = [
 
 export default function QuickNotes({ activeSection, onSectionChange, userId, sourceId, sourceTitle }: QuickNotesProps) {
     const [note, setNote] = useState('');
+    const [goalText, setGoalText] = useState('');
     const [isSaved, setIsSaved] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export default function QuickNotes({ activeSection, onSectionChange, userId, sou
                 tags: [
                     { type: 'topic', label: sourceTitle || 'Quick Note' },
                     { type: 'style', label: activeSection },
+                    ...(goalText.trim() ? [{ type: 'goal', label: goalText.trim() }] : []),
                 ],
                 author: 'User',
                 source_id: sourceId || undefined,
@@ -45,6 +47,7 @@ export default function QuickNotes({ activeSection, onSectionChange, userId, sou
             setSaveMessage('Saved!');
             setTimeout(() => setIsSaved(false), 2000);
             setNote('');
+            setGoalText('');
         } catch (error) {
             console.error('Failed to save quick note', error);
             setSaveMessage('Save failed.');
@@ -86,6 +89,12 @@ export default function QuickNotes({ activeSection, onSectionChange, userId, sou
                 onChange={(e) => setNote(e.target.value)}
                 placeholder={`Add a note about ${SECTIONS.find(s => s.id === activeSection)?.label.replace(/^\d+\.\s/, '')}...`}
                 className="w-full h-32 p-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-trust-blue focus:border-trust-blue resize-none mb-3 bg-gray-50 focus:bg-white transition-colors"
+            />
+            <input
+                value={goalText}
+                onChange={(e) => setGoalText(e.target.value)}
+                placeholder="Optional goal for this note"
+                className="w-full mb-3 px-3 py-2 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-trust-blue focus:border-trust-blue bg-gray-50 focus:bg-white transition-colors"
             />
 
             <div className="flex items-center justify-between">

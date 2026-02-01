@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Upload, FileText, Video, Headphones, Link as LinkIcon, Filter } from 'lucide-react';
 import LearningNoteCard from '../components/LearningNoteCard';
-import { createIngestionJob, listNotes, listNoteTopics, uploadFiles } from '../api/client';
+import { createIngestionJob, listArtifacts, listNotes, listNoteTopics, uploadFiles } from '../api/client';
 
 type NoteTag = {
     type: 'format' | 'style' | 'topic';
@@ -17,6 +17,8 @@ export default function KnowledgeBank() {
     const [selectedFormat, setSelectedFormat] = useState<string>('all');
     const [selectedStyle, setSelectedStyle] = useState<string>('all');
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
+    const [materials, setMaterials] = useState<any[]>([]);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messageTimerRef = useRef<number | null>(null);
 
@@ -51,9 +53,10 @@ export default function KnowledgeBank() {
 
     const loadNotes = async (resolvedUserId: string) => {
         try {
-            const [notesResponse, topicsResponse] = await Promise.all([
+            const [notesResponse, topicsResponse, materialsResponse] = await Promise.all([
                 listNotes(resolvedUserId, { limit: 60 }),
                 listNoteTopics(resolvedUserId),
+                listArtifacts(resolvedUserId),
             ]);
             setNotesData(notesResponse.items || []);
             const topicMap: Record<string, number> = {};
@@ -61,6 +64,7 @@ export default function KnowledgeBank() {
                 if (topic.topic) topicMap[topic.topic] = topic.count || 0;
             });
             setTopicCounts(topicMap);
+            setMaterials(materialsResponse.items || []);
         } catch (error) {
             console.error('Failed to load knowledge bank', error);
         }
@@ -69,6 +73,17 @@ export default function KnowledgeBank() {
     useEffect(() => {
         if (!userId) return;
         void loadNotes(userId);
+    }, [userId]);
+
+    useEffect(() => {
+        if (!userId) return;
+        const handler = () => {
+            void loadNotes(userId);
+        };
+        window.addEventListener('notifications:ready', handler);
+        return () => {
+            window.removeEventListener('notifications:ready', handler);
+        };
     }, [userId]);
 
     const formatTimestamp = (value?: string | null) => {
@@ -160,6 +175,31 @@ export default function KnowledgeBank() {
             </div>
 
             <div className="mb-10">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-semibold text-gray-900">Generated Materials</h2>
+                    <span className="text-sm text-gray-500">AI-generated summaries and notes</span>
+                </div>
+                {materials.length === 0 ? (
+                    <div className="text-sm text-gray-500">No generated materials yet.</div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+                        {materials.slice(0, 6).map((artifact: any) => (
+                            <Link key={artifact.id} to={`/materials/${artifact.id}`} className="block">
+                                <LearningNoteCard
+                                    type="pdf"
+                                    title={artifact.title || `Material (${artifact.artifact_type})`}
+                                    description={`Generated on ${new Date(artifact.created_at).toLocaleDateString()}`}
+                                    tags={[{ type: 'format', label: 'AI MATERIAL' }]}
+                                    author="AI"
+                                    timestamp={new Date(artifact.created_at).toLocaleTimeString()}
+                                />
+                            </Link>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="mb-10">
                 <div className="border-2 border-dashed border-blue-300 rounded-xl p-12 bg-blue-50/50 hover:bg-blue-50 transition-colors">
                     <div className="text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
@@ -207,7 +247,8 @@ export default function KnowledgeBank() {
                                 const files = event.target.files ? Array.from(event.target.files) : [];
                                 if (!files.length || !userId) return;
                                 try {
-                                    const response = await uploadFiles(userId, files);
+                                    setUploadProgress(0);
+                                    const response = await uploadFiles(userId, files, (percent) => setUploadProgress(percent));
                                     if (response?.results) {
                                         await Promise.all(
                                             response.results.map((item: any) => createIngestionJob({
@@ -226,10 +267,25 @@ export default function KnowledgeBank() {
                                     console.error('Knowledge bank upload failed', error);
                                     showStatus('Upload failed. Please try again.');
                                 } finally {
+                                    setUploadProgress(null);
                                     event.target.value = '';
                                 }
                             }}
                         />
+                        {uploadProgress !== null && (
+                            <div className="mb-4 w-full max-w-md">
+                                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                    <span>Uploading</span>
+                                    <span>{uploadProgress}%</span>
+                                </div>
+                                <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-trust-blue transition-all"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             className="px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"

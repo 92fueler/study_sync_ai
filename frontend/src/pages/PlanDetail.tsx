@@ -4,7 +4,7 @@ import {
     ChevronLeft, Clock, BookOpen, Play, CheckCircle,
     Lock, Calendar, Award, ArrowRight, RefreshCw
 } from 'lucide-react';
-import { getLearningPlan } from '../api/client';
+import { getLearningPlan, updateLearningPlan, getGoogleCalendarAuthUrl } from '../api/client';
 
 export default function PlanDetail() {
     const { id } = useParams<{ id: string }>();
@@ -12,9 +12,32 @@ export default function PlanDetail() {
     const [plan, setPlan] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
+    const [isConnecting, setIsConnecting] = useState(false);
+    const [difficultyChoice, setDifficultyChoice] = useState<'easier' | 'ok' | 'harder'>('ok');
 
-    const handleCheckAvailability = () => {
-        console.info('Calendar integration not configured.');
+    const handleCheckAvailability = async () => {
+        if (isConnecting) return;
+        setIsConnecting(true);
+        setCalendarMessage(null);
+        try {
+            const storedUserId = localStorage.getItem('user_id') || '';
+            if (!storedUserId) {
+                setCalendarMessage('Missing user id');
+                return;
+            }
+            const response = await getGoogleCalendarAuthUrl(storedUserId);
+            if (response?.auth_url) {
+                window.location.href = response.auth_url;
+            } else {
+                setCalendarMessage('Unable to start Google auth.');
+            }
+        } catch (error) {
+            console.error('Google auth error', error);
+            setCalendarMessage('Google auth failed.');
+        } finally {
+            setIsConnecting(false);
+        }
     };
 
     useEffect(() => {
@@ -35,6 +58,10 @@ export default function PlanDetail() {
                 setLoading(true);
                 const response = await getLearningPlan(id, userId);
                 setPlan(response.plan || null);
+                const current = response.plan?.difficulty?.toLowerCase();
+                if (current === 'beginner') setDifficultyChoice('easier');
+                else if (current === 'advanced') setDifficultyChoice('harder');
+                else setDifficultyChoice('ok');
             } catch (error) {
                 console.error('Failed to load plan details', error);
                 setErrorMessage('Unable to load plan details.');
@@ -44,6 +71,42 @@ export default function PlanDetail() {
         };
         void loadPlan();
     }, [id, userId]);
+
+    useEffect(() => {
+        if (!id || !userId) return;
+        const handler = () => {
+            void (async () => {
+                try {
+                    const response = await getLearningPlan(id, userId);
+                    setPlan(response.plan || null);
+                } catch (error) {
+                    console.error('Failed to refresh plan details', error);
+                }
+            })();
+        };
+        window.addEventListener('notifications:ready', handler);
+        return () => {
+            window.removeEventListener('notifications:ready', handler);
+        };
+    }, [id, userId]);
+
+    const handleDifficultyUpdate = async (choice: 'easier' | 'ok' | 'harder') => {
+        if (!plan || !userId) return;
+        setDifficultyChoice(choice);
+        const difficultyMap = {
+            easier: 'Beginner',
+            ok: 'Intermediate',
+            harder: 'Advanced',
+        } as const;
+        try {
+            const response = await updateLearningPlan(plan.id, userId, { difficulty: difficultyMap[choice] });
+            if (response?.plan) {
+                setPlan(response.plan);
+            }
+        } catch (error) {
+            console.error('Failed to update difficulty', error);
+        }
+    };
 
     if (loading) {
         return (
@@ -108,7 +171,7 @@ export default function PlanDetail() {
 
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                         <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
+                        <div className="flex items-center gap-3 mb-3">
                                 <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded uppercase tracking-wide">
                                     {plan.category || 'GENERAL'}
                                 </span>
@@ -127,6 +190,40 @@ export default function PlanDetail() {
                                     <span className="font-semibold text-gray-700">Goal:</span> {plan.goal}
                                 </div>
                             )}
+                            <div className="mt-4">
+                                <div className="text-xs uppercase font-semibold text-gray-400 mb-2">
+                                    Difficulty feedback
+                                </div>
+                                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+                                    <button
+                                        onClick={() => handleDifficultyUpdate('easier')}
+                                        className={`px-4 py-2 text-sm font-medium ${difficultyChoice === 'easier'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        Easier
+                                    </button>
+                                    <button
+                                        onClick={() => handleDifficultyUpdate('ok')}
+                                        className={`px-4 py-2 text-sm font-medium ${difficultyChoice === 'ok'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        All good
+                                    </button>
+                                    <button
+                                        onClick={() => handleDifficultyUpdate('harder')}
+                                        className={`px-4 py-2 text-sm font-medium ${difficultyChoice === 'harder'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-white text-gray-600 hover:bg-gray-50'
+                                            }`}
+                                    >
+                                        Harder
+                                    </button>
+                                </div>
+                            </div>
 
                             <div className="flex items-center gap-6 text-sm text-gray-600">
                                 <div className="flex items-center gap-2">
@@ -177,12 +274,14 @@ export default function PlanDetail() {
 
                             <button
                                 onClick={handleCheckAvailability}
-                                disabled
-                                className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-400 font-medium rounded-lg cursor-not-allowed"
+                                className="w-full mt-3 flex items-center justify-center gap-2 py-2.5 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
                             >
                                 <RefreshCw className="w-4 h-4" />
-                                Calendar sync not connected
+                                {isConnecting ? 'Connecting...' : 'Connect Google Calendar'}
                             </button>
+                            {calendarMessage && (
+                                <div className="text-xs text-gray-500 mt-2">{calendarMessage}</div>
+                            )}
                         </div>
                     </div>
                 </div>

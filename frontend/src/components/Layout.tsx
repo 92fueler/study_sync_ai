@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Bell, User } from 'lucide-react';
-import { getNotificationBadge, getNotifications, markNotificationRead, searchAll } from '../api/client';
+import { API_BASE_URL, getNotificationBadge, getNotifications, markNotificationRead, searchAll } from '../api/client';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
     const location = useLocation();
@@ -16,6 +16,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+    const notificationsStreamRef = useRef<EventSource | null>(null);
+    const [toastQueue, setToastQueue] = useState<any[]>([]);
+    const toastTimerRef = useRef<number | null>(null);
 
     const isActive = (path: string) => location.pathname === path;
 
@@ -30,17 +33,48 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         setUserId(tempUserId);
     }, []);
 
+    const loadBadge = async () => {
+        if (!userId) return;
+        try {
+            const response = await getNotificationBadge(userId);
+            setUnreadCount(response.unread_count || 0);
+        } catch (error) {
+            console.error('Failed to load notification badge', error);
+            setUnreadCount(0);
+        }
+    };
+
+    const normalizeNotification = (item: any) => {
+        if (!item) return item;
+        const data = typeof item.data === 'string' ? safeParseJson(item.data) : item.data;
+        return { ...item, data };
+    };
+
+    const safeParseJson = (value: string) => {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return null;
+        }
+    };
+
+    const loadNotifications = async () => {
+        if (!userId) return;
+        setIsLoadingNotifications(true);
+        try {
+            const response = await getNotifications(userId);
+            const items = Array.isArray(response.notifications) ? response.notifications : [];
+            setNotifications(items.map((item: any) => normalizeNotification(item)));
+        } catch (error) {
+            console.error('Failed to load notifications', error);
+            setNotifications([]);
+        } finally {
+            setIsLoadingNotifications(false);
+        }
+    };
+
     useEffect(() => {
         if (!userId) return;
-        const loadBadge = async () => {
-            try {
-                const response = await getNotificationBadge(userId);
-                setUnreadCount(response.unread_count || 0);
-            } catch (error) {
-                console.error('Failed to load notification badge', error);
-                setUnreadCount(0);
-            }
-        };
         void loadBadge();
     }, [userId]);
 
@@ -101,23 +135,102 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (!isNotificationsOpen || !userId) return;
-        const loadNotifications = async () => {
-            setIsLoadingNotifications(true);
+        if (notifications.length === 0) {
+            void loadNotifications();
+        }
+    }, [isNotificationsOpen, userId, notifications.length]);
+
+    useEffect(() => {
+        if (!userId) return;
+        if (notificationsStreamRef.current) {
+            notificationsStreamRef.current.close();
+        }
+        const sseUrl = `${API_BASE_URL.replace(/\/$/, '')}/notifications/stream?user_id=${userId}`;
+        const stream = new EventSource(sseUrl, { withCredentials: false });
+        notificationsStreamRef.current = stream;
+
+        stream.addEventListener('notifications', (event) => {
             try {
-                const response = await getNotifications(userId);
-                setNotifications(response.notifications || []);
+                const payload = JSON.parse((event as MessageEvent).data || '{}');
+                const incoming = Array.isArray(payload.notifications) ? payload.notifications.map((item: any) => normalizeNotification(item)) : [];
+                if (incoming.length) {
+                    setNotifications((prev) => {
+                        const seen = new Set(prev.map((item: any) => item.id));
+                        const newItems = incoming.filter((item: any) => !seen.has(item.id));
+                        if (newItems.length) {
+                            setToastQueue((prevQueue) => [...newItems, ...prevQueue].slice(0, 3));
+                            if (toastTimerRef.current) {
+                                window.clearTimeout(toastTimerRef.current);
+                            }
+                            toastTimerRef.current = window.setTimeout(() => {
+                                setToastQueue([]);
+                            }, 4000);
+                        }
+                        const merged = [...newItems, ...prev];
+                        return merged;
+                    });
+                }
+                if (payload.unread_count !== undefined && payload.unread_count !== null) {
+                    const count = typeof payload.unread_count === 'number'
+                        ? payload.unread_count
+                        : Number(payload.unread_count);
+                    if (!Number.isNaN(count)) {
+                        setUnreadCount(count);
+                    }
+                } else if (incoming.length) {
+                    const unreadDelta = incoming.filter((item: any) => item?.read === false).length;
+                    if (unreadDelta > 0) {
+                        setUnreadCount((prev) => prev + unreadDelta);
+                    }
+                }
+                if (incoming.some((item: any) => item?.data?.status === 'ready')) {
+                    window.dispatchEvent(new CustomEvent('notifications:ready'));
+                }
             } catch (error) {
-                console.error('Failed to load notifications', error);
-                setNotifications([]);
-            } finally {
-                setIsLoadingNotifications(false);
+                console.error('Failed to parse notification stream', error);
+            }
+        });
+
+        stream.addEventListener('error', () => {
+            stream.close();
+            notificationsStreamRef.current = null;
+            void loadBadge();
+        });
+
+        return () => {
+            stream.close();
+            notificationsStreamRef.current = null;
+            if (toastTimerRef.current) {
+                window.clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = null;
             }
         };
-        void loadNotifications();
-    }, [isNotificationsOpen, userId]);
+    }, [userId]);
 
     return (
         <div className="min-h-screen bg-gray-50">
+            {toastQueue.length > 0 && (
+                <div className="fixed top-20 right-6 z-[60] space-y-2">
+                    {toastQueue.map((item: any) => (
+                        <div
+                            key={item.id || item.created_at}
+                            className="bg-white border border-gray-200 shadow-lg rounded-xl px-4 py-3 w-80"
+                        >
+                            <div className="text-xs text-gray-400 uppercase font-semibold">
+                                {item.type || 'Notification'}
+                            </div>
+                            <div className="text-sm font-semibold text-gray-900 mt-1">
+                                {item.title || item.message || 'Update'}
+                            </div>
+                            {item.body && (
+                                <div className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                    {item.body}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
             <nav className="fixed top-0 w-full bg-white border-b border-gray-200 z-50">
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
                     <div className="flex items-center gap-8">
@@ -289,7 +402,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                             <div className="text-xs text-gray-500 py-6 text-center">No notifications</div>
                         ) : (
                             <div className="space-y-2 max-h-80 overflow-y-auto">
-                                {notifications.map((item) => (
+                                {notifications.map((item) => {
+                                    const status = item?.data?.status;
+                                    return (
                                     <button
                                         key={item.id || item.created_at}
                                         className="w-full text-left rounded-lg border border-gray-100 hover:border-trust-blue/40 hover:bg-blue-50/40 transition-colors p-3"
@@ -307,13 +422,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                         <div className="text-sm font-semibold text-gray-900 mt-1">
                                             {item.title || item.message || 'Update'}
                                         </div>
+                                        {status && (
+                                            <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
+                                                <span className={`px-2 py-0.5 rounded-full border ${status === 'ready' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                                                    {status}
+                                                </span>
+                                                <span>Received</span>
+                                                <span>→</span>
+                                                <span className={status === 'processing' ? 'font-semibold text-blue-700' : ''}>Generating</span>
+                                                <span>→</span>
+                                                <span className={status === 'ready' ? 'font-semibold text-green-700' : ''}>Ready</span>
+                                            </div>
+                                        )}
                                         {item.body && (
                                             <div className="text-xs text-gray-500 mt-1 line-clamp-2">
                                                 {item.body}
                                             </div>
                                         )}
                                     </button>
-                                ))}
+                                )})}
                             </div>
                         )}
                     </div>

@@ -20,5 +20,5 @@ test('knowledge bank refresh loads notes and topics', async ({ page }) => {
   await notesResponse
   await topicsResponse
   await expect(page.getByText('Knowledge Note')).toBeVisible()
-  await expect(page.getByText('E2E')).toBeVisible()
+  await expect(page.getByText('#E2E', { exact: true })).toBeVisible()
 })

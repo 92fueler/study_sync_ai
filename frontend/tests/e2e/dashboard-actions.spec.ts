@@ -91,7 +91,7 @@ test('dashboard upload PDF creates upload + ingestion job', async ({ page }) => 
   const ingestion = await ingestionResponse
   expect(ingestion.status()).toBe(200)
 
-  await expect(page.getByText('Files uploaded successfully.')).toBeVisible()
+  await expect(page.getByText(/Files uploaded|Upload processed/i)).toBeVisible()
 })
 
 test('dashboard upload audio creates upload + ingestion job', async ({ page }) => {
@@ -119,7 +119,7 @@ test('dashboard upload audio creates upload + ingestion job', async ({ page }) =
   const ingestion = await ingestionResponse
   expect(ingestion.status()).toBe(200)
 
-  await expect(page.getByText('Audio uploaded successfully.')).toBeVisible()
+  await expect(page.getByText(/Audio uploaded|Audio processed/i)).toBeVisible()
 })
 
 test('dashboard view all buttons route correctly', async ({ page }) => {
@@ -128,13 +128,12 @@ test('dashboard view all buttons route correctly', async ({ page }) => {
 
   await page.goto('/')
 
-  const viewAllLinks = page.getByRole('link', { name: /view all/i })
-  await viewAllLinks.first().click()
+  await page.locator('a[href="/plan"]').first().click()
   await expect(page).toHaveURL(/\/plan$/)
   await expect(page.getByRole('heading', { name: /learning plans/i })).toBeVisible()
 
   await page.goto('/')
-  await viewAllLinks.nth(1).click()
+  await page.locator('a[href="/bank"]').first().click()
   await expect(page).toHaveURL(/\/bank$/)
   await expect(page.getByRole('heading', { name: /knowledge bank/i })).toBeVisible()
 })

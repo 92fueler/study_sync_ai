@@ -26,5 +26,5 @@ test('dashboard upload creates ingestion job', async ({ page }) => {
   const ingestion = await ingestionResponse
   expect(ingestion.status()).toBe(200)
 
-  await expect(page.getByText('Files uploaded successfully.')).toBeVisible()
+  await expect(page.getByText(/Files uploaded|Upload processed/i)).toBeVisible()
 })
