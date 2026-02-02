@@ -36,6 +36,13 @@ async def fetchrow(query: str, *args):
         return await conn.fetchrow(query, *args)
 
 
+async def execute(query: str, *args):
+    """Execute a query without returning rows."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        return await conn.execute(query, *args)
+
+
 async def close_pool():
     """Close the global connection pool."""
     global _pool

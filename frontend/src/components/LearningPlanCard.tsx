@@ -1,6 +1,9 @@
-import { Clock, Play, Pause, Eye, CheckCircle, Trophy, Calendar, MoreVertical, Cpu, Beaker, BookOpenText, Languages, BookOpen } from 'lucide-react';
+import { Clock, Play, Pause, Eye, CheckCircle, Trophy, Calendar, MoreVertical, Cpu, Beaker, BookOpenText, Languages, BookOpen, Edit, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
 
 interface LearningPlanCardProps {
+    id?: string;
     status: 'active' | 'paused' | 'completed';
     title: string;
     goal?: string;
@@ -15,6 +18,11 @@ interface LearningPlanCardProps {
     totalModules?: number;
     completedModules?: number;
     achievement?: string;
+    onPause?: (planId: string) => void;
+    onResume?: (planId: string) => void;
+    onViewDetails?: (planId: string) => void;
+    onEdit?: (planId: string) => void;
+    onDelete?: (planId: string) => void;
 }
 
 const statusConfig = {
@@ -53,6 +61,7 @@ const categoryIcons = {
 };
 
 export default function LearningPlanCard({
+    id,
     status,
     title,
     goal,
@@ -66,20 +75,152 @@ export default function LearningPlanCard({
     totalModules = 12,
     completedModules,
     achievement,
+    onPause,
+    onResume,
+    onViewDetails,
+    onEdit,
+    onDelete,
 }: LearningPlanCardProps) {
+    const navigate = useNavigate();
     const config = statusConfig[status];
     const completed = completedModules || Math.floor((percentage / 100) * totalModules);
+    const [showMenu, setShowMenu] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setShowMenu(false);
+            }
+        };
+        if (showMenu) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showMenu]);
+
+    const handlePause = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (id && onPause) {
+            onPause(id);
+        }
+    };
+
+    const handleResume = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (id && onResume) {
+            onResume(id);
+        }
+    };
+
+    const handleViewDetails = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (id) {
+            if (onViewDetails) {
+                onViewDetails(id);
+            } else {
+                navigate(`/plans/${id}`);
+            }
+        }
+    };
+
+    const handleMenuClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowMenu(!showMenu);
+    };
+
+    const handleEdit = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowMenu(false);
+        if (id) {
+            if (onEdit) {
+                onEdit(id);
+            } else {
+                navigate(`/plans/${id}`);
+            }
+        }
+    };
+
+    const handleDelete = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowMenu(false);
+        if (id && onDelete) {
+            onDelete(id);
+        }
+    };
 
     return (
         <div className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition-all border border-gray-100">
             {/* Header with status badge and menu */}
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start justify-between mb-4 relative">
                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${config.badgeColor}`}>
                     {config.badge}
                 </span>
-                <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                    <MoreVertical className="w-4 h-4 text-gray-400" />
-                </button>
+                <div className="relative" ref={menuRef}>
+                    <button 
+                        onClick={handleMenuClick}
+                        className="p-1 hover:bg-gray-100 rounded transition-colors"
+                        aria-label="More options"
+                    >
+                        <MoreVertical className="w-4 h-4 text-gray-400" />
+                    </button>
+                    {showMenu && (
+                        <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[160px] py-1">
+                            <button
+                                onClick={handleViewDetails}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                                <Eye className="w-4 h-4" />
+                                View Details
+                            </button>
+                            <button
+                                onClick={handleEdit}
+                                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                                <Edit className="w-4 h-4" />
+                                Edit Plan
+                            </button>
+                            {status === 'active' && onPause && (
+                                <button
+                                    onClick={handlePause}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                    <Pause className="w-4 h-4" />
+                                    Pause Plan
+                                </button>
+                            )}
+                            {status === 'paused' && onResume && (
+                                <button
+                                    onClick={handleResume}
+                                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                >
+                                    <Play className="w-4 h-4" />
+                                    Resume Plan
+                                </button>
+                            )}
+                            {onDelete && (
+                                <>
+                                    <div className="border-t border-gray-200 my-1" />
+                                    <button
+                                        onClick={handleDelete}
+                                        className="w-full px-4 py-2 text-left text-sm text-red-700 hover:bg-red-50 flex items-center gap-2"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        Delete Plan
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Category badge if provided */}
@@ -188,11 +329,17 @@ export default function LearningPlanCard({
             <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
                 {status === 'active' && (
                     <>
-                        <button className="flex items-center gap-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                            onClick={handlePause}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                             <Pause className="w-4 h-4" />
                             Pause Plan
                         </button>
-                        <button className="flex items-center gap-1 px-3 py-2 text-sm text-trust-blue hover:bg-blue-50 rounded-lg transition-colors ml-auto">
+                        <button 
+                            onClick={handleViewDetails}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-trust-blue hover:bg-blue-50 rounded-lg transition-colors ml-auto"
+                        >
                             View Details
                             <Eye className="w-4 h-4" />
                         </button>
@@ -201,11 +348,17 @@ export default function LearningPlanCard({
 
                 {status === 'paused' && (
                     <>
-                        <button className="flex items-center gap-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                            onClick={handleViewDetails}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                             <Eye className="w-4 h-4" />
                             View Details
                         </button>
-                        <button className="flex items-center gap-1 px-3 py-2 text-sm text-trust-blue hover:bg-blue-50 rounded-lg transition-colors ml-auto">
+                        <button 
+                            onClick={handleResume}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-trust-blue hover:bg-blue-50 rounded-lg transition-colors ml-auto"
+                        >
                             <Play className="w-4 h-4" />
                             Resume Plan
                         </button>
@@ -214,12 +367,18 @@ export default function LearningPlanCard({
 
                 {status === 'completed' && (
                     <>
-                        <button className="flex items-center gap-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <button 
+                            onClick={handleViewDetails}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
                             <Trophy className="w-4 h-4" />
                             Review
                         </button>
-                        <button className="flex items-center gap-1 px-3 py-2 text-sm text-trust-blue hover:bg-blue-50 rounded-lg transition-colors ml-auto">
-                            View Certificate
+                        <button 
+                            onClick={handleViewDetails}
+                            className="flex items-center gap-1 px-3 py-2 text-sm text-trust-blue hover:bg-blue-50 rounded-lg transition-colors ml-auto"
+                        >
+                            View Details
                             <Eye className="w-4 h-4" />
                         </button>
                     </>

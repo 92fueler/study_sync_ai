@@ -60,32 +60,118 @@ def _build_system_instruction(style_dna: Dict[str, Any]) -> str:
     prefers_diagrams = style_dna.get("prefers_diagrams", True)
     
     tone_map = {
-        "eli5": "Explain concepts simply, as if to a beginner. Use analogies and everyday examples.",
-        "socratic": "Use a questioning approach. Pose thought-provoking questions to guide understanding.",
-        "academic": "Use formal, precise language. Include technical terminology and citations where relevant."
+        "eli5": """Explain concepts simply, as if to a 10-year-old. Use:
+- Analogies and everyday examples
+- Simple language (avoid jargon unless necessary, then explain it)
+- Step-by-step breakdowns
+- "Imagine that..." scenarios
+Example: "Neural networks are like a team of experts. Each expert (neuron) looks at part of the problem, and they vote on the answer." """,
+        
+        "socratic": """Use a questioning approach to guide understanding. Use:
+- Thought-provoking questions that lead to insights
+- "Why do you think...?" and "What if...?" patterns
+- Progressive revelation (build understanding through questions)
+- Encourage critical thinking
+Example: "Why might a neural network need multiple layers? What happens if we only have one layer?" """,
+        
+        "academic": """Use formal, precise language appropriate for higher education. Use:
+- Technical terminology with proper definitions
+- Citations and references where relevant
+- Structured arguments with evidence
+- Domain-specific conventions
+Example: "Neural networks employ backpropagation algorithms to minimize loss functions through gradient descent optimization." """
     }
     
     format_map = {
-        "cornell": "Use Cornell note format with cues, notes, and summary sections.",
-        "mindmap": "Organize content hierarchically with clear branches and connections.",
-        "outline": "Use a clean outline format with headers, bullet points, and numbered lists."
+        "cornell": """Use Cornell note format with three sections:
+1. CUE COLUMN (left): Key questions, terms, prompts
+2. NOTES SECTION (right): Detailed explanations, examples, connections
+3. SUMMARY (bottom): 2-3 sentence synthesis of main points
+
+Structure each major concept as:
+[CUE] → [NOTES] → [SUMMARY]""",
+        
+        "mindmap": """Organize content hierarchically with clear branches:
+- Central topic at the root
+- Main themes as primary branches
+- Details as sub-branches
+- Use visual hierarchy (indentation, bullets)
+- Show connections between related concepts
+
+Format:
+# Central Topic
+## Main Theme 1
+  - Detail 1.1
+  - Detail 1.2
+## Main Theme 2
+  - Detail 2.1""",
+        
+        "outline": """Use a clean outline format:
+- Clear hierarchical headers (H1, H2, H3)
+- Bullet points for lists
+- Numbered lists for sequences/steps
+- Consistent indentation
+- Table of contents at the top"""
     }
     
-    return f"""You are a study material synthesizer. Create content with these preferences:
+    emoji_guidance = """Use emojis strategically to:
+- Highlight key concepts (🎯 Main Point)
+- Indicate sections (📚 Theory, 💡 Example, ⚠️ Warning)
+- Make content scannable
+- Enhance engagement without overuse
+Limit: 1-2 emojis per major section""" if uses_emoji else "Do not use emojis. Keep content professional and text-focused."
+    
+    diagram_guidance = """Include Mermaid diagrams for:
+- Complex processes (flowcharts)
+- Relationships (entity-relationship diagrams)
+- Hierarchies (tree structures)
+- Sequences (sequence diagrams)
+
+Format: Use ```mermaid code blocks. Keep diagrams simple and readable.
+Example: ```mermaid
+graph TD
+    A[Input] --> B[Process]
+    B --> C[Output]
+```""" if prefers_diagrams else "Focus on text explanations. Avoid diagrams unless absolutely necessary for clarity."
+    
+    return f"""You are an expert study material synthesizer creating personalized learning content for StudySync AI.
+
+YOUR MISSION:
+Transform source material into clear, engaging, and effective study notes that match the user's learning preferences.
+
+STYLE PREFERENCES:
 
 TONE: {tone_map.get(tone, tone_map['eli5'])}
 
 FORMAT: {format_map.get(format_pref, format_map['outline'])}
 
-{"EMOJIS: Use emojis to highlight key points and make content engaging." if uses_emoji else "EMOJIS: Do not use emojis."}
+EMOJIS: {emoji_guidance}
 
-{"DIAGRAMS: Include Mermaid diagrams for complex concepts using ```mermaid blocks." if prefers_diagrams else "DIAGRAMS: Focus on text explanations, avoid diagrams."}
+DIAGRAMS: {diagram_guidance}
 
-Always:
-1. Start with a clear overview
-2. Break down complex concepts
-3. Highlight key takeaways
-4. End with a brief summary"""
+CONTENT QUALITY STANDARDS:
+1. ACCURACY: Maintain factual accuracy from source material. Do not invent facts.
+2. COMPLETENESS: Cover all major concepts from the source, prioritizing by importance
+3. CLARITY: Explain complex ideas in accessible ways matching the chosen tone
+4. STRUCTURE: Follow the specified format consistently throughout
+5. ENGAGEMENT: Make content interesting and memorable (within tone constraints)
+6. ACTIONABILITY: Include practical examples, applications, or exercises when relevant
+
+OUTPUT STRUCTURE (for all formats):
+1. OVERVIEW: 2-3 sentence summary of what will be covered
+2. MAIN CONTENT: Organized according to format preference
+3. KEY TAKEAWAYS: Bulleted list of 3-5 most important points
+4. SUMMARY: Brief recap of main concepts
+5. NEXT STEPS: Suggested follow-up topics or practice areas (if applicable)
+
+COMMON PITFALLS TO AVOID:
+- Don't copy source material verbatim (synthesize and rephrase)
+- Don't oversimplify complex topics (maintain depth appropriate to tone)
+- Don't skip important details (balance completeness with readability)
+- Don't mix formats (stick to the chosen format consistently)
+- Don't add information not in the source (maintain accuracy)
+
+Remember: Your goal is to create study materials that help users learn effectively while matching their preferred style."""
 
 
 def generate_artifact(
@@ -159,15 +245,60 @@ async def _generate_artifact_async(
         system_instruction = _build_system_instruction(style_dna)
         
         # Generate full artifact
+        target_words = time_available_minutes * 200
         full_prompt = f"""{system_instruction}
 
-Create a comprehensive study note for this content.
-Target reading time: {time_available_minutes} minutes.
+TASK: Create a comprehensive study note from the source material below.
 
-Source material:
-{combined[:15000]}
+CONTEXT:
+- User has {time_available_minutes} minutes available for reading
+- Target word count: approximately {target_words} words (assuming ~200 words/minute reading speed)
+- Source material may contain multiple documents or sections
 
-Generate a well-structured study note matching user preferences."""
+SOURCE MATERIAL:
+{combined[:20000]}
+
+GENERATION INSTRUCTIONS:
+
+STEP 1: Analyze the source material
+- Identify the main themes and concepts
+- Note any dependencies or prerequisites
+- Identify key examples, case studies, or applications
+- Note any technical terms that need explanation
+
+STEP 2: Structure your response
+- Follow the format preference specified in your system instructions
+- Organize content logically (foundational concepts first, then applications)
+- Ensure smooth flow between sections
+- Use clear transitions
+
+STEP 3: Synthesize content
+- Combine information from multiple sources if provided
+- Resolve any contradictions (note if source material conflicts)
+- Highlight connections between concepts
+- Add context that helps understanding (within tone constraints)
+
+STEP 4: Enhance for learning
+- Include examples that illustrate concepts
+- Add analogies if tone allows
+- Create memory aids (mnemonics, patterns) where helpful
+- Suggest practical applications
+
+STEP 5: Finalize
+- Ensure all key concepts are covered
+- Verify format consistency
+- Check that content matches tone preference
+- Add summary and key takeaways
+
+OUTPUT REQUIREMENTS:
+- Start with a clear title/overview
+- Follow the specified format (cornell/mindmap/outline)
+- Include all sections specified in system instructions
+- Maintain factual accuracy from source
+- Target approximately {target_words} words
+- End with key takeaways and summary
+
+Generate the study note now:"""
         
         full_response = _get_genai_client().models.generate_content(
             model="gemini-2.5-flash",
@@ -178,10 +309,46 @@ Generate a well-structured study note matching user preferences."""
         # Generate 5-min version
         five_prompt = f"""{system_instruction}
 
-Condense into a 5-minute quick summary. Focus on key takeaways.
+TASK: Create a 5-minute quick summary (approximately 1000 words) focusing on the most essential information.
 
-Source:
-{combined[:8000]}"""
+CONTEXT:
+- User has limited time (5 minutes)
+- This is a condensed version for quick review or preview
+- Should capture the essence without deep detail
+
+SOURCE MATERIAL:
+{combined[:12000]}
+
+SUMMARY STRATEGY:
+
+PRIORITIZE:
+1. Core concepts and definitions (what is it?)
+2. Key principles or rules (how does it work?)
+3. Main applications or use cases (why does it matter?)
+4. Critical examples or case studies (concrete illustration)
+
+OMIT:
+- Detailed explanations (save for full version)
+- Extended examples (keep to 1-2 brief examples)
+- Background context (unless essential)
+- Edge cases or exceptions (unless critical)
+
+STRUCTURE:
+1. ONE-SENTENCE OVERVIEW: What is this about?
+2. KEY CONCEPTS: 3-5 main ideas with brief explanations
+3. ESSENTIAL DETAILS: Critical information needed to understand
+4. QUICK EXAMPLES: 1-2 brief, memorable examples
+5. ACTION ITEMS: What should the user remember or do next?
+
+OUTPUT REQUIREMENTS:
+- Maximum 1000 words (target: 800-1000)
+- Use the specified format preference (but simplified)
+- Maintain tone preference
+- Focus on actionable insights
+- Make it scannable (use headers, bullets, bold)
+- End with "Key Takeaways" section (3-5 bullet points)
+
+Generate the 5-minute summary now:"""
         
         five_response = _get_genai_client().models.generate_content(
             model="gemini-2.5-flash",
@@ -271,10 +438,46 @@ async def _generate_5min_async(
         
         prompt = f"""{system_instruction}
 
-Create a 5-minute quick summary. Focus on the most important points.
+TASK: Create a 5-minute quick summary (approximately 1000 words) focusing on the most essential information.
 
-Source:
-{row['raw_text'][:8000]}"""
+CONTEXT:
+- User has limited time (5 minutes)
+- This is a condensed version for quick review or preview
+- Should capture the essence without deep detail
+
+SOURCE MATERIAL:
+{row['raw_text'][:12000]}
+
+SUMMARY STRATEGY:
+
+PRIORITIZE:
+1. Core concepts and definitions (what is it?)
+2. Key principles or rules (how does it work?)
+3. Main applications or use cases (why does it matter?)
+4. Critical examples or case studies (concrete illustration)
+
+OMIT:
+- Detailed explanations (save for full version)
+- Extended examples (keep to 1-2 brief examples)
+- Background context (unless essential)
+- Edge cases or exceptions (unless critical)
+
+STRUCTURE:
+1. ONE-SENTENCE OVERVIEW: What is this about?
+2. KEY CONCEPTS: 3-5 main ideas with brief explanations
+3. ESSENTIAL DETAILS: Critical information needed to understand
+4. QUICK EXAMPLES: 1-2 brief, memorable examples
+5. ACTION ITEMS: What should the user remember or do next?
+
+OUTPUT REQUIREMENTS:
+- Maximum 1000 words (target: 800-1000)
+- Use the specified format preference (but simplified)
+- Maintain tone preference
+- Focus on actionable insights
+- Make it scannable (use headers, bullets, bold)
+- End with "Key Takeaways" section (3-5 bullet points)
+
+Generate the 5-minute summary now:"""
         
         response = _get_genai_client().models.generate_content(
             model="gemini-2.5-flash",

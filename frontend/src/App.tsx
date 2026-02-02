@@ -10,6 +10,7 @@ import StudySession from './pages/StudySession';
 import PlanDetail from './pages/PlanDetail';
 import SignUp from './pages/SignUp';
 import MaterialDetail from './pages/MaterialDetail';
+import ContentDetail from './pages/ContentDetail';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isAuthenticated = localStorage.getItem('isAuthenticated');
@@ -21,7 +22,18 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }
 
   if (!hasOnboarded) {
-    return <Navigate to="/dna" state={{ from: location }} replace />;
+    return <Navigate to="/onboarding" state={{ from: location }} replace />;
+  }
+
+  return children;
+}
+
+function RequireAuthOnly({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = localStorage.getItem('isAuthenticated');
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/signup" state={{ from: location }} replace />;
   }
 
   return children;
@@ -43,12 +55,18 @@ function App() {
                   <Dashboard />
                 </RequireAuth>
               } />
+              <Route path="/onboarding" element={
+                <RequireAuthOnly>
+                  <Onboarding />
+                </RequireAuthOnly>
+              } />
               <Route path="/dna" element={<Onboarding />} />
               <Route path="/plan" element={<LearningPlan />} />
               <Route path="/plans/:id" element={<PlanDetail />} />
               <Route path="/bank" element={<KnowledgeBank />} />
               <Route path="/notes/:id" element={<NoteDetail />} />
               <Route path="/materials/:id" element={<MaterialDetail />} />
+              <Route path="/content/:id" element={<ContentDetail />} />
               <Route path="/session/:sessionId" element={<StudySession />} />
             </Routes>
           </Layout>

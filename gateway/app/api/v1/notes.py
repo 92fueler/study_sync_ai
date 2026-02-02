@@ -127,8 +127,18 @@ async def _ensure_content_item(user_id: str, note: Dict[str, Any]) -> Optional[s
     return content_id
 
 
-def _parse_dt(value: str) -> datetime:
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+def _parse_dt(value: Union[str, datetime]) -> datetime:
+    """Parse datetime from string or return datetime object as-is."""
+    if isinstance(value, datetime):
+        return value
+    if not value:
+        raise ValueError("Cannot parse empty datetime value")
+    # Handle ISO format strings with or without Z suffix
+    if isinstance(value, str):
+        # Replace Z with +00:00 for ISO format compatibility
+        normalized = value.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized)
+    raise TypeError(f"Expected str or datetime, got {type(value)}")
 
 
 async def _queue_ready_notification(user_id: str, note: Dict[str, Any], event: str) -> None:

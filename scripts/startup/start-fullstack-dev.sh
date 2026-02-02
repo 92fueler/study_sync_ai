@@ -26,6 +26,8 @@ fi
 echo "=== Starting Full Stack Development Environment ==="
 echo "Creating tmux session: $SESSION_NAME"
 echo ""
+echo "Note: Docker containers will be rebuilt to pick up code changes"
+echo ""
 echo "Commands:"
 echo "  Ctrl+B then D  - Detach from session"
 echo "  Ctrl+B then X  - Kill current pane"
@@ -33,23 +35,16 @@ echo "  Ctrl+B then C  - Create new pane"
 echo "  tmux attach -t $SESSION_NAME  - Reattach to session"
 echo ""
 
-# Start infrastructure
-if ! docker-compose ps redis supabase | grep -q "Up"; then
-    echo "Starting infrastructure..."
-    docker-compose up -d redis supabase
-    sleep 3
-fi
-
 # Create new tmux session
 tmux new-session -d -s "$SESSION_NAME" -x 200 -y 50
 
 # Split window horizontally
 tmux split-window -h -t "$SESSION_NAME"
 
-# Start backend in left pane
+# Start backend in left pane (script handles infrastructure, venv, etc.)
 tmux send-keys -t "$SESSION_NAME:0.0" "cd '$PWD' && ./scripts/startup/start-backend.sh" C-m
 
-# Start frontend in right pane
+# Start frontend in right pane (script handles nvm, node_modules, etc.)
 tmux send-keys -t "$SESSION_NAME:0.1" "cd '$PWD' && ./scripts/startup/start-frontend.sh" C-m
 
 # Select first pane and attach

@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Link as LinkIcon, FileUp, Paperclip, Mic, Sparkles, ArrowRight } from 'lucide-react';
-import LearningPlanCard from '../components/LearningPlanCard';
 import LearningNoteCard from '../components/LearningNoteCard';
-import { createIngestionJob, createNote, listArtifacts, listLearningPlans, uploadFiles } from '../api/client';
+import { createIngestionJob, createNote, listArtifacts, uploadFiles } from '../api/client';
 
 export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('raw-notes');
@@ -12,7 +11,6 @@ export default function Dashboard() {
     const [goalText, setGoalText] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [recentMaterials, setRecentMaterials] = useState<any[]>([]);
-    const [activePlans, setActivePlans] = useState<any[]>([]);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -50,19 +48,11 @@ export default function Dashboard() {
 
     const loadData = async (resolvedUserId: string) => {
         try {
-            const [plansResponse] = await Promise.all([
-                listLearningPlans(resolvedUserId, { limit: 3 }),
-            ]);
-            setActivePlans(plansResponse.items || []);
-            try {
-                const materialsResponse = await listArtifacts(resolvedUserId);
-                setRecentMaterials(materialsResponse.items || []);
-            } catch (error) {
-                console.error('Failed to load materials', error);
-                setRecentMaterials([]);
-            }
+            const materialsResponse = await listArtifacts(resolvedUserId);
+            setRecentMaterials(materialsResponse.items || []);
         } catch (error) {
-            console.error('Failed to load dashboard data', error);
+            console.error('Failed to load materials', error);
+            setRecentMaterials([]);
         }
     };
 
@@ -81,44 +71,6 @@ export default function Dashboard() {
             window.removeEventListener('notifications:ready', handler);
         };
     }, [userId]);
-
-    const formatTimestamp = (value?: string | null) => {
-        if (!value) return 'just now';
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return 'just now';
-        const diffMs = Date.now() - date.getTime();
-        const diffMinutes = Math.floor(diffMs / 60000);
-        if (diffMinutes < 60) return `${Math.max(diffMinutes, 1)}m ago`;
-        const diffHours = Math.floor(diffMinutes / 60);
-        if (diffHours < 24) return `${diffHours}h ago`;
-        const diffDays = Math.floor(diffHours / 24);
-        return `${diffDays}d ago`;
-    };
-
-    const normalizePlan = (plan: any) => {
-        const statusMap: Record<string, 'active' | 'paused' | 'completed'> = {
-            active: 'active',
-            paused: 'paused',
-            completed: 'completed',
-        };
-        return {
-            id: plan.id,
-            status: statusMap[plan.status] || 'active',
-            category: plan.category || 'TECH',
-            categoryColor: plan.category_color || 'blue',
-            title: plan.title || 'Untitled Plan',
-            goal: plan.goal || undefined,
-            difficulty: plan.difficulty || 'Intermediate',
-            percentage: plan.progress_percent ?? 0,
-            module: plan.details?.current_module || plan.details?.module || undefined,
-            timeRemaining: plan.estimated_time || undefined,
-            totalModules: plan.total_modules || plan.module_count || 0,
-            completedModules: plan.completed_modules || 0,
-            nextSession: plan.next_session_at
-                ? new Date(plan.next_session_at).toLocaleString()
-                : undefined,
-        };
-    };
 
     const handleUploadClick = () => {
         fileInputRef.current?.click();
@@ -152,13 +104,16 @@ export default function Dashboard() {
                 showStatus('Files uploaded. Generating notes now.');
                 await Promise.all(
                     response.results.map((item: any) => {
+                        const ext = (item.filename || '').split('.').pop()?.toLowerCase();
+                        const noteType = ['pdf', 'mp3', 'wav', 'mp4'].includes(ext || '') ? ext : 'text';
+                        const formatLabel = noteType.toUpperCase() === 'PDF' ? 'PDF' : noteType.toUpperCase();
                         return createNote({
                             user_id: userId,
-                            note_type: 'pdf',
+                            note_type: noteType,
                             title: item.filename || 'Uploaded File',
                             description: 'Uploaded from dashboard.',
                             tags: [
-                                { type: 'format', label: 'PDF' },
+                                { type: 'format', label: formatLabel },
                                 { type: 'topic', label: 'Upload' },
                             ],
                             author: 'User',

@@ -17,11 +17,38 @@ router = APIRouter()
 
 def _enqueue_user_generation(user_id: str, content_id: str, artifact_type: str = "full"):
     """Enqueue user-triggered generation to high priority queue."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
-        from workers.queue import enqueue_generation
-        return enqueue_generation(user_id, content_id, artifact_type, high_priority=True)
-    except Exception as e:
-        print(f"Warning: Failed to enqueue generation: {e}")
+        from workers.queue import enqueue_generation, get_redis_connection
+        from redis import (
+            ConnectionError as RedisConnectionError,
+            TimeoutError as RedisTimeoutError,
+            RedisError
+        )
+        
+        # Test Redis connection first
+        try:
+            conn = get_redis_connection()
+            conn.ping()
+        except (RedisConnectionError, RedisTimeoutError, OSError, RedisError) as e:
+            logger.error(f"Redis connection test failed: {e}", exc_info=True)
+            return None
+        
+        # Try to enqueue
+        try:
+            return enqueue_generation(user_id, content_id, artifact_type, high_priority=True)
+        except (RedisConnectionError, RedisTimeoutError, OSError, RedisError) as e:
+            # Redis connection issues during enqueue
+            logger.error(f"Redis connection failed during enqueue: {e}", exc_info=True)
+            return None
+        except Exception as e:
+            # Other queue/enqueue errors (e.g., RQ errors)
+            logger.error(f"Failed to enqueue generation: {e}", exc_info=True)
+            return None
+    except ImportError as e:
+        logger.error(f"Failed to import workers.queue: {e}")
         return None
 
 
@@ -49,9 +76,11 @@ async def generate_artifact_async(request: AsyncGenerateRequest):
     job = _enqueue_user_generation(request.user_id, request.content_id, request.artifact_type)
     
     if job is None:
+        import os
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
         raise HTTPException(
             status_code=503,
-            detail="Job queue unavailable, please try again"
+            detail=f"Job queue unavailable. Check: 1) Redis is running at {redis_url}, 2) Workers are running (generation-worker, notification-worker, priority-worker), 3) Gateway can connect to Redis. To start: docker-compose up -d redis generation-worker notification-worker priority-worker"
         )
     
     return {
@@ -64,16 +93,22 @@ async def generate_artifact_async(request: AsyncGenerateRequest):
 
 @router.get("/job/{job_id}")
 async def get_job_status(job_id: str):
-    """Get the status of a queued generation job."""
+    """
+    Get the status of a queued generation job.
+    
+    RQ status values: 'queued', 'started', 'finished', 'failed', 'deferred', 'scheduled'
+    Test expects: 'finished' (success) or 'failed' (error)
+    """
     try:
         from rq.job import Job
         from workers.queue import get_redis_connection
         
         job = Job.fetch(job_id, connection=get_redis_connection())
+        status = job.get_status()  # Returns lowercase: 'queued', 'started', 'finished', 'failed'
         
         result = {
             "job_id": job_id,
-            "status": job.get_status(),
+            "status": status,
             "created_at": str(job.created_at) if job.created_at else None,
             "started_at": str(job.started_at) if job.started_at else None,
             "ended_at": str(job.ended_at) if job.ended_at else None,
@@ -86,6 +121,9 @@ async def get_job_status(job_id: str):
         
         return result
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to fetch job {job_id}: {e}", exc_info=True)
         raise HTTPException(status_code=404, detail=f"Job not found: {job_id}")
 
 

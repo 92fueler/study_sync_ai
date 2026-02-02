@@ -51,7 +51,22 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "gateway"}
+    health = {
+        "status": "healthy",
+        "service": "gateway"
+    }
+    
+    # Check Redis connectivity
+    try:
+        from workers.queue import get_redis_connection
+        conn = get_redis_connection()
+        conn.ping()
+        health["redis"] = "connected"
+    except Exception as e:
+        health["redis"] = f"disconnected: {str(e)}"
+        health["status"] = "degraded"
+    
+    return health
 
 
 @app.get("/")

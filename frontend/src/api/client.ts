@@ -19,6 +19,22 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+// Response interceptor for better error handling
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      console.error(
+        'Backend connection failed. Make sure the gateway is running:\n' +
+        '  docker-compose up -d gateway\n' +
+        '  or\n' +
+        '  ./scripts/startup/start-backend.sh'
+      )
+    }
+    return Promise.reject(error)
+  }
+)
+
 export default apiClient
 
 // API endpoints
@@ -77,6 +93,28 @@ export const listArtifacts = async (userId: string, artifactType?: string) => {
 
 export const getArtifact = async (artifactId: string) => {
   const response = await apiClient.get(`/artifacts/${artifactId}`)
+  return response.data
+}
+
+export const getContent = async (userId: string, contentId: string, includeRaw = false) => {
+  const params = new URLSearchParams({ user_id: userId })
+  if (includeRaw) {
+    params.append('include_raw', 'true')
+  }
+  const response = await apiClient.get(`/content/${contentId}?${params.toString()}`)
+  return response.data
+}
+
+export const listContent = async (
+  userId: string,
+  options?: { limit?: number; offset?: number; status?: string; sort?: string }
+) => {
+  const params = new URLSearchParams({ user_id: userId })
+  if (options?.limit) params.append('limit', String(options.limit))
+  if (options?.offset) params.append('offset', String(options.offset))
+  if (options?.status) params.append('status', options.status)
+  if (options?.sort) params.append('sort', options.sort)
+  const response = await apiClient.get(`/content?${params.toString()}`)
   return response.data
 }
 
@@ -194,6 +232,26 @@ export const approveLearningPlan = async (planId: string, userId: string) => {
   return response.data
 }
 
+export const pauseLearningPlan = async (planId: string, userId: string) => {
+  const response = await apiClient.post(`/learning-plans/${planId}/pause?user_id=${userId}`)
+  return response.data
+}
+
+export const resumeLearningPlan = async (planId: string, userId: string) => {
+  const response = await apiClient.post(`/learning-plans/${planId}/resume?user_id=${userId}`)
+  return response.data
+}
+
+export const generateSuggestedPlans = async (
+  userId: string,
+  contextMode: string = 'growth',
+  maxPlans: number = 3
+) => {
+  const params = new URLSearchParams({ user_id: userId, context_mode: contextMode, max_plans: String(maxPlans) })
+  const response = await apiClient.post(`/learning-plans/generate-suggested?${params.toString()}`)
+  return response.data
+}
+
 export const createLearningPlan = async (payload: {
   user_id: string
   title?: string
@@ -234,6 +292,11 @@ export const updateLearningPlan = async (planId: string, userId: string, payload
   return response.data
 }
 
+export const deleteLearningPlan = async (planId: string, userId: string) => {
+  const response = await apiClient.delete(`/learning-plans/${planId}?user_id=${userId}`)
+  return response.data
+}
+
 export const updateSettings = async (userId: string, payload: {
   theme?: string
   notifications?: Record<string, unknown>
@@ -252,5 +315,17 @@ export const getSettings = async (userId: string) => {
 export const searchAll = async (userId: string, query: string, limit = 10) => {
   const params = new URLSearchParams({ user_id: userId, q: query, limit: String(limit) })
   const response = await apiClient.get(`/search?${params.toString()}`)
+  return response.data
+}
+
+export const getPriorityQueue = async (userId: string, limit = 10) => {
+  const params = new URLSearchParams({ user_id: userId, limit: String(limit) })
+  const response = await apiClient.get(`/queue?${params.toString()}`)
+  return response.data
+}
+
+export const recalculatePriority = async (userId: string) => {
+  const params = new URLSearchParams({ user_id: userId })
+  const response = await apiClient.post(`/queue/recalculate?${params.toString()}`)
   return response.data
 }
