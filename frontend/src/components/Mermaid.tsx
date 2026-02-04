@@ -59,8 +59,13 @@ export default function Mermaid({ chart }: MermaidProps) {
     let cancelled = false
     const loadMermaid = async () => {
       try {
-        // Try standard import first
-        const mermaidModule = await import('mermaid')
+        // Prefer explicit ESM entry to avoid package entry resolution issues
+        let mermaidModule: any
+        try {
+          mermaidModule = await import('mermaid/dist/mermaid.esm.mjs')
+        } catch {
+          mermaidModule = await import('mermaid')
+        }
         // Handle different export formats
         const instance = 
           mermaidModule.default || 
