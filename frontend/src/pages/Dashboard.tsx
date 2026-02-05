@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Link as LinkIcon, FileUp, Paperclip, Mic, Sparkles, ArrowRight } from 'lucide-react';
+import { Paperclip, Mic, Sparkles, ArrowRight } from 'lucide-react';
 import LearningNoteCard from '../components/LearningNoteCard';
+import ProfilePreview from '../components/ProfilePreview';
 import { createIngestionJob, createNote, listArtifacts, uploadFiles } from '../api/client';
 
 export default function Dashboard() {
-    const [activeTab, setActiveTab] = useState('raw-notes');
     const [userId, setUserId] = useState('');
     const [inputText, setInputText] = useState('');
     const [goalText, setGoalText] = useState('');
@@ -186,18 +186,18 @@ export default function Dashboard() {
             const ingestion = await createIngestionJob({
                 user_id: userId,
                 name: 'Dashboard input',
-                job_type: activeTab === 'url-input' ? 'url' : 'text',
+                job_type: 'text',
                 status: 'ingesting',
                 progress: 0,
                 metadata: { source: 'dashboard', input: inputText.slice(0, 500) },
             });
             const note = await createNote({
                 user_id: userId,
-                note_type: activeTab === 'url-input' ? 'url' : 'text',
+                note_type: 'text',
                 title: inputText.split('\n')[0]?.slice(0, 64) || 'New Note',
                 description: inputText.slice(0, 160),
                 tags: [
-                    { type: 'format', label: activeTab === 'url-input' ? 'URL' : 'Notes' },
+                    { type: 'format', label: 'Notes' },
                     { type: 'topic', label: 'Dashboard' },
                     ...(goalText.trim() ? [{ type: 'goal', label: goalText.trim() }] : []),
                 ],
@@ -222,119 +222,95 @@ export default function Dashboard() {
 
     return (
         <div className="max-w-7xl mx-auto px-6 py-12">
-            <div className="text-center mb-12">
-                <h1 className="text-5xl font-serif font-bold text-gray-900 mb-8">
-                    Structure your chaos<br />into clarity
-                </h1>
-
-                <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm p-6">
-                    <div className="flex items-center gap-4 mb-4 border-b border-gray-200">
-                        <button
-                            onClick={() => setActiveTab('raw-notes')}
-                            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'raw-notes'
-                                ? 'text-trust-blue border-b-2 border-trust-blue'
-                                : 'text-gray-600 hover:text-gray-900'
-                                }`}
-                        >
-                            <FileText className="w-4 h-4" />
-                            Raw Notes
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('url-input')}
-                            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'url-input'
-                                ? 'text-trust-blue border-b-2 border-trust-blue'
-                                : 'text-gray-600 hover:text-gray-900'
-                                }`}
-                        >
-                            <LinkIcon className="w-4 h-4" />
-                            URL Input
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('upload-pdf')}
-                            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors ${activeTab === 'upload-pdf'
-                                ? 'text-trust-blue border-b-2 border-trust-blue'
-                                : 'text-gray-600 hover:text-gray-900'
-                                }`}
-                        >
-                            <FileUp className="w-4 h-4" />
-                            Upload PDF
-                        </button>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+                <div className="lg:col-span-2">
+                    <div className="text-center mb-8">
+                        <h1 className="text-5xl font-serif font-bold text-gray-900 mb-8">
+                            Structure your chaos<br />into clarity
+                        </h1>
                     </div>
 
-                    {statusMessage && (
-                        <div className="mb-3 rounded-md bg-blue-50 text-blue-700 text-sm px-3 py-2">
-                            {statusMessage}
-                        </div>
-                    )}
+                    <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-sm p-6">
 
-                    <textarea
-                        className="w-full h-32 p-4 text-gray-600 placeholder-gray-400 resize-none focus:outline-none"
-                        placeholder="Paste a lecture URL, drag & drop a PDF, or start typing your chaotic thoughts here..."
-                        value={inputText}
-                        onChange={(e) => setInputText(e.target.value)}
-                    />
-                    <input
-                        className="w-full mt-3 px-4 py-2 text-sm text-gray-600 placeholder-gray-400 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-trust-blue"
-                        placeholder="Optional goal for this note (e.g., 'Prep for midterm')"
-                        value={goalText}
-                        onChange={(e) => setGoalText(e.target.value)}
-                    />
-
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                        <div className="flex items-center gap-3">
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                multiple
-                                className="hidden"
-                                onChange={handleFilesSelected}
-                            />
-                            <input
-                                ref={audioInputRef}
-                                type="file"
-                                accept="audio/*"
-                                className="hidden"
-                                onChange={handleAudioSelected}
-                            />
-                            <button
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                onClick={handleUploadClick}
-                                aria-label="Attach files"
-                            >
-                                <Paperclip className="w-5 h-5 text-gray-400" />
-                            </button>
-                            <button
-                                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                                onClick={handleAudioClick}
-                                aria-label="Upload audio"
-                            >
-                                <Mic className="w-5 h-5 text-gray-400" />
-                            </button>
-                        </div>
-
-                        <button
-                            className="flex items-center gap-2 px-6 py-2.5 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-60"
-                            onClick={handleGenerateStructure}
-                            disabled={isSubmitting || !inputText.trim()}
-                        >
-                            <Sparkles className="w-4 h-4" />
-                            {isSubmitting ? 'Generating...' : 'Generate Structure'}
-                        </button>
-                    </div>
-                    {uploadProgress !== null && (
-                        <div className="mt-3">
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                <span>Uploading</span>
-                                <span>{uploadProgress}%</span>
+                        {statusMessage && (
+                            <div className="mb-3 rounded-md bg-blue-50 text-blue-700 text-sm px-3 py-2">
+                                {statusMessage}
                             </div>
-                            <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-trust-blue transition-all"
-                                    style={{ width: `${uploadProgress}%` }}
+                        )}
+
+                        <textarea
+                            className="w-full h-32 p-4 text-gray-600 placeholder-gray-400 resize-none focus:outline-none"
+                            placeholder="Paste a lecture URL, drag & drop a PDF, or start typing your chaotic thoughts here..."
+                            value={inputText}
+                            onChange={(e) => setInputText(e.target.value)}
+                        />
+                        <input
+                            className="w-full mt-3 px-4 py-2 text-sm text-gray-600 placeholder-gray-400 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-trust-blue"
+                            placeholder="Optional goal for this note (e.g., 'Prep for midterm')"
+                            value={goalText}
+                            onChange={(e) => setGoalText(e.target.value)}
+                        />
+
+                        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                            <div className="flex items-center gap-3">
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    multiple
+                                    className="hidden"
+                                    onChange={handleFilesSelected}
                                 />
+                                <input
+                                    ref={audioInputRef}
+                                    type="file"
+                                    accept="audio/*"
+                                    className="hidden"
+                                    onChange={handleAudioSelected}
+                                />
+                                <button
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                    onClick={handleUploadClick}
+                                    aria-label="Attach files"
+                                >
+                                    <Paperclip className="w-5 h-5 text-gray-400" />
+                                </button>
+                                <button
+                                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                                    onClick={handleAudioClick}
+                                    aria-label="Upload audio"
+                                >
+                                    <Mic className="w-5 h-5 text-gray-400" />
+                                </button>
                             </div>
+
+                            <button
+                                className="flex items-center gap-2 px-6 py-2.5 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-60"
+                                onClick={handleGenerateStructure}
+                                disabled={isSubmitting || !inputText.trim()}
+                            >
+                                <Sparkles className="w-4 h-4" />
+                                {isSubmitting ? 'Generating...' : 'Generate Structure'}
+                            </button>
                         </div>
-                    )}
+                        {uploadProgress !== null && (
+                            <div className="mt-3">
+                                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                    <span>Uploading</span>
+                                    <span>{uploadProgress}%</span>
+                                </div>
+                                <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-trust-blue transition-all"
+                                        style={{ width: `${uploadProgress}%` }}
+                                    />
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="lg:col-span-1">
+                    {userId && <ProfilePreview userId={userId} />}
                 </div>
             </div>
 
