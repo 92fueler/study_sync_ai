@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Headphones, Video, FileText, Image as ImageIcon, HelpCircle, Lightbulb, Share2, MonitorPlay } from 'lucide-react';
+import { Check, Headphones, Video, FileText, Image as ImageIcon } from 'lucide-react';
 import ProfilePreview from '../components/ProfilePreview';
 import { getSettings, updateSettings } from '../api/client';
 
@@ -72,14 +72,6 @@ export default function Onboarding() {
         );
     };
 
-    const togglePreference = (pref: string) => {
-        setSelectedPreferences(prev =>
-            prev.includes(pref)
-                ? prev.filter(p => p !== pref)
-                : [...prev, pref]
-        );
-    };
-
     return (
         <div className="max-w-7xl mx-auto px-6 py-12">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -145,23 +137,35 @@ export default function Onboarding() {
 
                         <div className="flex flex-wrap gap-3 mb-6">
                             {[
-                                { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
-                                { id: 'analogies', label: 'Analogies', icon: Lightbulb },
-                                { id: 'knowledge_graph', label: 'Knowledge Graph', icon: Share2 },
-                                { id: 'lecture', label: 'Lecture Style', icon: MonitorPlay },
-                            ].map((pref) => (
-                                <button
-                                    key={pref.id}
-                                    onClick={() => togglePreference(pref.id)}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all text-sm font-medium ${selectedPreferences.includes(pref.id)
-                                        ? 'bg-trust-blue text-white border-trust-blue shadow-sm'
-                                        : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <pref.icon className="w-4 h-4" />
-                                    {pref.label}
-                                </button>
-                            ))}
+                                { id: 'analogies', label: 'Analogies', icon: '🧩', description: 'Explain it using comparisons' },
+                                { id: 'real_world', label: 'Real-World Examples', icon: '🌍', description: 'Show me how it applies to industry' },
+                                { id: 'concept_map', label: 'Concept Map', icon: '🗺️', description: 'Visualize the structure' },
+                                { id: 'practice_set', label: 'Practice Set', icon: '✅', description: 'Give me questions to test myself' },
+                            ].map((pref) => {
+                                const Icon = pref.icon;
+                                const isSelected = selectedPreferences.includes(pref.id);
+                                return (
+                                    <button
+                                        key={pref.id}
+                                        onClick={() => {
+                                            setSelectedPreferences(prev =>
+                                                prev.includes(pref.id)
+                                                    ? prev.filter(p => p !== pref.id)
+                                                    : [...prev, pref.id]
+                                            );
+                                        }}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${isSelected
+                                            ? 'bg-trust-blue text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                        title={pref.description}
+                                    >
+                                        <span className="text-lg">{Icon}</span>
+                                        {pref.label}
+                                        {isSelected && <Check size={16} className="ml-1" />}
+                                    </button>
+                                );
+                            })}
                         </div>
 
                         {/* Custom Style Input */}
@@ -289,6 +293,8 @@ export default function Onboarding() {
                                         }
                                     }
                                     await loadSettings(resolvedUserId);
+                                    // Trigger ProfilePreview to reload
+                                    window.dispatchEvent(new Event('notifications:ready'));
                                 } catch (error) {
                                     console.error('Failed to save DNA', error);
                                     setSaveMessage('Save failed. Please try again.');

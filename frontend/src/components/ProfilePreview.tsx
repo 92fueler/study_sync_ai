@@ -37,10 +37,14 @@ export default function ProfilePreview({ userId }: ProfilePreviewProps) {
 
     const getPreferenceLabel = (pref: string): string => {
         const prefMap: { [key: string]: string } = {
-            'quizzes': 'Quizzes',
             'analogies': 'Analogies',
-            'knowledge_graph': 'Knowledge Graph',
-            'lecture': 'Lecture Style'
+            'real_world': 'Real-World Examples',
+            'concept_map': 'Concept Map',
+            'practice_set': 'Practice Set',
+            // Legacy mappings for backward compatibility
+            'quizzes': 'Practice Set',
+            'knowledge_graph': 'Concept Map',
+            'lecture': 'Real-World Examples'
         };
         return prefMap[pref] || pref.replace(/_/g, ' ');
     };
