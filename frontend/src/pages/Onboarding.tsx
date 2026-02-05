@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Check, Headphones, Video, FileText, Image as ImageIcon, HelpCircle, Lightbulb, Share2, Mic, MonitorPlay } from 'lucide-react';
+import { Check, Headphones, Video, FileText, Image as ImageIcon, HelpCircle, Lightbulb, Share2, MonitorPlay } from 'lucide-react';
+import ProfilePreview from '../components/ProfilePreview';
 import { getSettings, updateSettings } from '../api/client';
 
 export default function Onboarding() {
     const [selectedFormats, setSelectedFormats] = useState<string[]>(['audio', 'notes']);
     const [selectedPreferences, setSelectedPreferences] = useState<string[]>(['quizzes', 'analogies']);
     const [customStyle, setCustomStyle] = useState('');
-    const [cognitiveTone, setCognitiveTone] = useState('socratic');
+    const [cognitiveTone, setCognitiveTone] = useState('textbook');
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
     const [userId, setUserId] = useState('');
-
-    const normalizePref = (value: string) => value.replace(/_/g, ' ');
 
     const loadSettings = async (resolvedUserId: string) => {
         try {
@@ -149,8 +148,7 @@ export default function Onboarding() {
                                 { id: 'quizzes', label: 'Quizzes', icon: HelpCircle },
                                 { id: 'analogies', label: 'Analogies', icon: Lightbulb },
                                 { id: 'knowledge_graph', label: 'Knowledge Graph', icon: Share2 },
-                                { id: 'podcast', label: 'Podcast Style', icon: Mic },
-                                { id: 'lecture', label: 'Lecture Style', icon: MonitorPlay }, // Changed from User to MonitorPlay specifically for Lecture
+                                { id: 'lecture', label: 'Lecture Style', icon: MonitorPlay },
                             ].map((pref) => (
                                 <button
                                     key={pref.id}
@@ -184,121 +182,74 @@ export default function Onboarding() {
                     <div className="mb-8">
                         <h2 className="text-xl font-semibold text-gray-900 mb-4">Cognitive Tone</h2>
 
-                        <div className="flex gap-3 mb-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                             <button
-                                onClick={() => setCognitiveTone('academic')}
-                                className={`px-6 py-2 rounded-full font-medium transition-colors ${cognitiveTone === 'academic'
-                                    ? 'bg-trust-blue text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                onClick={() => setCognitiveTone('textbook')}
+                                className={`px-4 py-3 rounded-lg font-medium transition-all text-left ${cognitiveTone === 'textbook'
+                                    ? 'bg-trust-blue text-white shadow-md'
+                                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
                                     }`}
                             >
-                                Academic
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xl">🎓</span>
+                                    <span className="font-semibold">Textbook</span>
+                                </div>
+                                <p className={`text-xs ${cognitiveTone === 'textbook' ? 'text-blue-100' : 'text-gray-500'}`}>
+                                    Authoritative, dense, precise
+                                </p>
                             </button>
                             <button
-                                onClick={() => setCognitiveTone('socratic')}
-                                className={`px-6 py-2 rounded-full font-medium transition-colors ${cognitiveTone === 'socratic'
-                                    ? 'bg-trust-blue text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                onClick={() => setCognitiveTone('coaching')}
+                                className={`px-4 py-3 rounded-lg font-medium transition-all text-left ${cognitiveTone === 'coaching'
+                                    ? 'bg-trust-blue text-white shadow-md'
+                                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
                                     }`}
                             >
-                                Socratic
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xl">📣</span>
+                                    <span className="font-semibold">Coaching</span>
+                                </div>
+                                <p className={`text-xs ${cognitiveTone === 'coaching' ? 'text-blue-100' : 'text-gray-500'}`}>
+                                    Motivational, probing, guides you
+                                </p>
                             </button>
                             <button
-                                onClick={() => setCognitiveTone('eli5')}
-                                className={`px-6 py-2 rounded-full font-medium transition-colors ${cognitiveTone === 'eli5'
-                                    ? 'bg-trust-blue text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                onClick={() => setCognitiveTone('beginner_friendly')}
+                                className={`px-4 py-3 rounded-lg font-medium transition-all text-left ${cognitiveTone === 'beginner_friendly'
+                                    ? 'bg-trust-blue text-white shadow-md'
+                                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
                                     }`}
                             >
-                                ELI5
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xl">🌱</span>
+                                    <span className="font-semibold">Beginner Friendly</span>
+                                </div>
+                                <p className={`text-xs ${cognitiveTone === 'beginner_friendly' ? 'text-blue-100' : 'text-gray-500'}`}>
+                                    Welcoming, simple, reassuring
+                                </p>
                             </button>
                             <button
-                                onClick={() => setCognitiveTone('bulleted')}
-                                className={`px-6 py-2 rounded-full font-medium transition-colors ${cognitiveTone === 'bulleted'
-                                    ? 'bg-trust-blue text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                onClick={() => setCognitiveTone('key_points')}
+                                className={`px-4 py-3 rounded-lg font-medium transition-all text-left ${cognitiveTone === 'key_points'
+                                    ? 'bg-trust-blue text-white shadow-md'
+                                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
                                     }`}
                             >
-                                Bulleted
-                            </button>
-                        </div>
-
-                        <p className="text-sm text-gray-600 italic">
-                            * The "Socratic" tone asks guiding questions rather than giving direct answers, encouraging critical thinking.
-                        </p>
-                    </div>
-
-                    <div>
-                        <h2 className="text-xl font-semibold text-gray-900 mb-4">Style Matcher</h2>
-
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-gray-400 transition-colors cursor-pointer">
-                            <div className="text-5xl mb-4">📄</div>
-                            <p className="text-gray-900 font-medium mb-2">Click to upload or drag and drop</p>
-                            <p className="text-sm text-gray-500 mb-4">Upload handwritten notes or essays (PDF, IMG, TXT)</p>
-                            <button className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
-                                Browse Files
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-xl">⚡️</span>
+                                    <span className="font-semibold">Key Points Only</span>
+                                </div>
+                                <p className={`text-xs ${cognitiveTone === 'key_points' ? 'text-blue-100' : 'text-gray-500'}`}>
+                                    Blunt, efficient, strictly business
+                                </p>
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <div className="lg:col-span-1">
-                    <div className="bg-white rounded-lg shadow-sm p-6 mb-6 sticky top-20">
-                        <h3 className="text-sm font-semibold text-gray-500 mb-4">DNA PREVIEW</h3>
-                        <p className="text-xs text-gray-500 mb-4">CURRENT CONFIGURATION</p>
-
-                        <div className="flex justify-center mb-6">
-                            <div className="relative w-32 h-32">
-                                <svg className="w-32 h-32 transform -rotate-90">
-                                    <circle
-                                        cx="64"
-                                        cy="64"
-                                        r="56"
-                                        stroke="currentColor"
-                                        strokeWidth="8"
-                                        fill="none"
-                                        className="text-gray-200"
-                                    />
-                                    <circle
-                                        cx="64"
-                                        cy="64"
-                                        r="56"
-                                        stroke="currentColor"
-                                        strokeWidth="8"
-                                        fill="none"
-                                        strokeDasharray={`${2 * Math.PI * 56}`}
-                                        strokeDashoffset={`${2 * Math.PI * 56 * 0.25}`}
-                                        className="text-trust-blue"
-                                        strokeLinecap="round"
-                                    />
-                                </svg>
-                                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <div className="text-3xl mb-1">🧬</div>
-                                    <span className="text-2xl font-bold text-gray-900">75%</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <h4 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                            {selectedPreferences
-                                .slice(0, 2)
-                                .map((p) => normalizePref(p).charAt(0).toUpperCase() + normalizePref(p).slice(1))
-                                .join(' & ') || 'Custom'} Learner
-                        </h4>
-                        <p className="text-sm text-gray-600 text-center mb-4">
-                            Your profile is optimized for <strong>{selectedFormats.join(', ')}</strong> content with {cognitiveTone} tone.
-                        </p>
-
-                        <div className="flex flex-wrap gap-2 justify-center mb-6">
-                            {selectedFormats.map(f => (
-                                <span key={f} className="px-3 py-1 bg-blue-50 text-trust-blue text-xs font-medium rounded-full">
-                                    #{f.toUpperCase()}
-                                </span>
-                            ))}
-                            <span className="px-3 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-full">
-                                #{cognitiveTone.toUpperCase()}
-                            </span>
-                        </div>
+                    <div className="mb-6 sticky top-20">
+                        <ProfilePreview userId={userId} />
 
                         <button
                             onClick={async () => {
@@ -345,7 +296,7 @@ export default function Onboarding() {
                                     setIsSaving(false);
                                 }
                             }}
-                            className="w-full px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium mb-2 disabled:opacity-60"
+                            className="w-full px-6 py-3 bg-trust-blue text-white rounded-lg hover:bg-blue-700 transition-colors font-medium mb-2 disabled:opacity-60 mt-4"
                             disabled={isSaving}
                         >
                             {isSaving ? 'Saving…' : '💾 Save & Continue'}
@@ -354,16 +305,6 @@ export default function Onboarding() {
                         {saveMessage && (
                             <p className="text-xs text-center text-gray-500 mb-2">{saveMessage}</p>
                         )}
-                    </div>
-
-                    <div className="bg-gray-900 rounded-lg p-6 text-white">
-                        <h3 className="text-lg font-semibold mb-2">Need Guidance?</h3>
-                        <p className="text-sm text-gray-300 mb-4">
-                            Not sure which cognitive tone fits you? Take our 3-minute assessment.
-                        </p>
-                        <button className="text-sm font-medium text-white hover:text-gray-200 transition-colors">
-                            Start Assessment →
-                        </button>
                     </div>
                 </div>
             </div>
