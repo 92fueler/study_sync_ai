@@ -395,6 +395,30 @@ Generate the 5-minute summary now:"""
             user_id, content_ids, profile_version, five_content
         )
         
+        # Auto-generate audio if user has 'audio' in their formats preference
+        formats = style_dna.get("formats", [])
+        if "audio" in formats:
+            logger.info(f"Auto-generating audio for artifact {artifact_id} (user has 'audio' in formats)")
+            try:
+                # Import here to avoid circular dependency
+                from .audio import generate_audio_from_text
+                
+                # Get cognitive tone for voice selection
+                cognitive_tone = style_dna.get("tone", "textbook")
+                
+                # Generate audio asynchronously (don't wait for it)
+                asyncio.create_task(
+                    generate_audio_from_text(
+                        text=full_content,
+                        artifact_id=artifact_id,
+                        cognitive_tone=cognitive_tone
+                    )
+                )
+                logger.info(f"Audio generation task created for artifact {artifact_id}")
+            except Exception as audio_error:
+                # Don't fail the whole request if audio generation fails
+                logger.warning(f"Audio generation failed for artifact {artifact_id}: {audio_error}")
+        
         result = {
             "status": "success",
             "artifact_id": artifact_id,
