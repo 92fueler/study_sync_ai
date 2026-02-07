@@ -75,26 +75,33 @@ def _build_system_instruction(style_dna: Dict[str, Any]) -> str:
     custom_style = style_dna.get("custom_style", "")
     
     tone_map = {
-        "eli5": """Explain concepts simply, as if to a 10-year-old. Use:
+        "textbook": """Use clear, authoritative academic tone with precision and formality. Use:
+- Technical terminology with proper definitions
+- Structured explanations with logical flow
+- Formal language appropriate for higher education
+- Evidence-based statements
+Example: "Neural networks employ backpropagation algorithms to minimize loss functions through gradient descent optimization." """,
+        
+        "coaching": """Use encouraging, motivational tone with warmth and support. Use:
+- Positive, uplifting language
+- "You can do this" and "Let's explore together" patterns
+- Celebrate progress and understanding
+- Guide with enthusiasm and patience
+Example: "Great! Now let's dive into how neural networks learn. Think of it as training a team - each iteration makes them better at their job!" """,
+        
+        "beginner_friendly": """Use friendly, reassuring tone for first-time learners. Use:
+- Simple, accessible language (avoid jargon unless necessary, then explain it)
 - Analogies and everyday examples
-- Simple language (avoid jargon unless necessary, then explain it)
 - Step-by-step breakdowns
-- "Imagine that..." scenarios
+- Patient, welcoming approach
 Example: "Neural networks are like a team of experts. Each expert (neuron) looks at part of the problem, and they vote on the answer." """,
         
-        "socratic": """Use a questioning approach to guide understanding. Use:
-- Thought-provoking questions that lead to insights
-- "Why do you think...?" and "What if...?" patterns
-- Progressive revelation (build understanding through questions)
-- Encourage critical thinking
-Example: "Why might a neural network need multiple layers? What happens if we only have one layer?" """,
-        
-        "academic": """Use formal, precise language appropriate for higher education. Use:
-- Technical terminology with proper definitions
-- Citations and references where relevant
-- Structured arguments with evidence
-- Domain-specific conventions
-Example: "Neural networks employ backpropagation algorithms to minimize loss functions through gradient descent optimization." """
+        "key_points": """Use direct, efficient tone focused on essential information. Use:
+- Concise, to-the-point explanations
+- Bullet points and lists
+- Skip elaboration unless critical
+- Focus on actionable insights
+Example: "Neural networks: layers of neurons → forward pass → calculate loss → backpropagation → update weights." """
     }
     
     format_map = {
@@ -156,7 +163,7 @@ Transform source material into clear, engaging, and effective study notes that m
 
 STYLE PREFERENCES:
 
-TONE: {tone_map.get(tone, tone_map['eli5'])}
+TONE: {tone_map.get(tone, tone_map['textbook'])}
 
 FORMAT: {format_map.get(format_pref, format_map['outline'])}
 

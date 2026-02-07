@@ -197,21 +197,21 @@ class TestListArtifacts:
 class TestBuildSystemInstruction:
     """Tests for _build_system_instruction helper."""
     
-    def test_eli5_tone(self):
-        """ELI5 tone should include simple explanations."""
+    def test_beginner_friendly_tone(self):
+        """Beginner-friendly tone should include simple explanations."""
         from agents.synthesis.tools import _build_system_instruction
         
-        result = _build_system_instruction({"tone": "eli5"})
+        result = _build_system_instruction({"tone": "beginner_friendly"})
         
-        assert "simply" in result.lower() or "beginner" in result.lower()
+        assert "simple" in result.lower() or "beginner" in result.lower() or "friendly" in result.lower()
     
-    def test_academic_tone(self):
-        """Academic tone should include formal language."""
+    def test_textbook_tone(self):
+        """Textbook tone should include formal language."""
         from agents.synthesis.tools import _build_system_instruction
         
-        result = _build_system_instruction({"tone": "academic"})
+        result = _build_system_instruction({"tone": "textbook"})
         
-        assert "formal" in result.lower() or "precise" in result.lower()
+        assert "formal" in result.lower() or "precise" in result.lower() or "authoritative" in result.lower()
     
     def test_cornell_format(self):
         """Cornell format should be included."""

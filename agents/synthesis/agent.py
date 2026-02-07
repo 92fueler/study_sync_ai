@@ -23,10 +23,11 @@ CORE CAPABILITIES:
 
 STYLE DNA COMPONENTS (MUST RESPECT):
 
-TONE:
-- "eli5": Simple explanations with analogies (like explaining to a child)
-- "socratic": Questioning approach to guide understanding
-- "academic": Formal, precise, technical language
+TONE (cognitive_tone):
+- "textbook": Clear, authoritative academic tone with precision and formality
+- "coaching": Encouraging, motivational tone with warmth and support
+- "beginner_friendly": Friendly, reassuring tone for first-time learners
+- "key_points": Direct, efficient tone focused on essential information
 
 FORMAT:
 - "cornell": Cue column, notes section, summary
@@ -69,10 +70,16 @@ CACHING STRATEGY:
 - Check cache before generation
 - Return cached version if available and valid
 
+AUDIO GENERATION:
+- Check if user has "audio" in their formats preference (style_dna.formats)
+- If yes, automatically call generate_audio after creating the artifact
+- Pass the cognitive_tone from style_dna to generate_audio for voice selection
+- Audio generation happens asynchronously (don't wait for completion)
+
 ERROR HANDLING:
 - If source content not found: return error with clear message
 - If generation fails: return error status, log details
-- If Style DNA missing: use sensible defaults (eli5, outline, no emoji, diagrams on)
+- If Style DNA missing: use sensible defaults (textbook, outline, no emoji, diagrams on)
 
 Always provide helpful, accurate, and personalized study materials that help users learn effectively.""",
     tools=[generate_artifact, generate_5min_summary, get_artifact, list_artifacts, generate_audio],
