@@ -53,11 +53,26 @@ def _run_async(coro):
 
 
 def _build_system_instruction(style_dna: Dict[str, Any]) -> str:
-    """Build Gemini system instruction from Style DNA."""
-    tone = style_dna.get("tone", "eli5")
+    """Build Gemini system instruction from Style DNA.
+    
+    Args:
+        style_dna: Dictionary containing:
+            - tone: Cognitive tone (textbook, coaching, beginner_friendly, key_points)
+            - format_pref: Format preference (outline, cornell, mindmap)
+            - uses_emoji: Whether to use emojis
+            - prefers_diagrams: Whether to include diagrams
+            - learning_preferences: List of preferences (analogies, real_world, concept_map, practice_set)
+            - custom_style: User's custom style description
+    
+    Returns:
+        Formatted system instruction string for Gemini
+    """
+    tone = style_dna.get("tone", "textbook")
     format_pref = style_dna.get("format_pref", "outline")
     uses_emoji = style_dna.get("uses_emoji", False)
     prefers_diagrams = style_dna.get("prefers_diagrams", True)
+    learning_preferences = style_dna.get("learning_preferences", [])
+    custom_style = style_dna.get("custom_style", "")
     
     tone_map = {
         "eli5": """Explain concepts simply, as if to a 10-year-old. Use:
@@ -188,7 +203,7 @@ def generate_artifact(
         user_id: User identifier
         content_ids: List of source content IDs to synthesize
         profile_version: Profile version for cache key
-        style_dna: User's style preferences (tone, format_pref, uses_emoji, prefers_diagrams)
+        style_dna: User's style preferences (includes tone, format_pref, uses_emoji, prefers_diagrams, learning_preferences, custom_style)
         time_available_minutes: Target reading time
     
     Returns:
@@ -410,7 +425,7 @@ def generate_5min_summary(
         user_id: User identifier
         content_id: Single content ID to summarize
         profile_version: Profile version for cache
-        style_dna: User's style preferences
+        style_dna: User's style preferences (includes learning_preferences and custom_style)
     
     Returns:
         Dict with status, artifact_id, content, estimated_minutes (always 5)

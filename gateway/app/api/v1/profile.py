@@ -15,9 +15,11 @@ router = APIRouter()
 
 class StyleDNA(BaseModel):
     format_pref: str = "outline"
-    tone: str = "eli5"
+    tone: str = "textbook"  # Updated default from "eli5" to "textbook"
     uses_emoji: bool = False
     prefers_diagrams: bool = True
+    learning_preferences: List[str] = []  # NEW: analogies, real_world, concept_map, practice_set
+    custom_style: str = ""  # NEW: User's custom style description
 
 
 class CalendarContext(BaseModel):
