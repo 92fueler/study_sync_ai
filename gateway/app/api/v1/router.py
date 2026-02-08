@@ -23,6 +23,7 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.notes import router as notes_router
 from app.api.v1.ingestion import router as ingestion_router
 from app.api.v1.audio import router as audio_router
+from app.api.v1.video import router as video_router
 from app.api.v1.dev import router as dev_router
 from app.core.config import settings
 
