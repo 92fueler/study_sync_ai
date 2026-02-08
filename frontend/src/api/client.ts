@@ -326,6 +326,28 @@ export const getPriorityQueue = async (userId: string, limit = 10) => {
 
 export const recalculatePriority = async (userId: string) => {
   const params = new URLSearchParams({ user_id: userId })
-  const response = await apiClient.post(`/queue/recalculate?${params.toString()}`)
+  const response = await apiClient.get(`/queue/recalculate?${params.toString()}`)
   return response.data
 }
+
+// Audio API
+export const getAudioMetadata = async (artifactId: string) => {
+  const response = await apiClient.get(`/audio/metadata/${artifactId}`)
+  return response.data
+}
+
+export const getAudioUrl = (filename: string) => {
+  return `${API_BASE_URL}/audio/${filename}`
+}
+
+// Video API
+export const getVideoMetadata = async (artifactId: string) => {
+  const response = await apiClient.get(`/video/metadata/${artifactId}`)
+  return response.data
+}
+
+export const getVideoUrl = (filename: string) => {
+  return `${API_BASE_URL}/video/${filename}`
+}
+
+

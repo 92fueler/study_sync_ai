@@ -665,7 +665,7 @@ async def _generate_video_async(artifact_id: str, user_id: str, total_duration: 
     try:
         # 1. Get artifact content
         artifact = await conn.fetchrow(
-            "SELECT content_text, artifact_type FROM artifacts WHERE id = $1",
+            "SELECT content, artifact_type FROM artifacts WHERE id = $1",
             artifact_id
         )
         if not artifact:
@@ -678,11 +678,18 @@ async def _generate_video_async(artifact_id: str, user_id: str, total_duration: 
         )
         
         style_dna = profile['style_dna'] if profile else {}
+        if isinstance(style_dna, str):
+            try:
+                style_dna = json.loads(style_dna)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse style_dna for user {user_id}, using defaults")
+                style_dna = {}
+
         user_prefs = style_dna.get('styles', ['real_world', 'concept_map'])
         cognitive_tone = style_dna.get('cognitive_tone', 'textbook')
         
         # 3. Categorize topic
-        content = artifact['content_text'] or ""
+        content = artifact['content'] or ""
         topic = f"Study material - {artifact['artifact_type']}"
         topic_category = categorize_topic(topic, content[:500])
         

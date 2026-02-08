@@ -132,6 +132,7 @@ services:
       dockerfile: workers/Dockerfile
     command: python -m workers.generation_worker
     environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - REDIS_URL=redis://redis:6379
       - SYNTHESIS_AGENT_URL=http://synthesis-agent:8003
       - PROFILE_AGENT_URL=http://profile-agent:8002
@@ -200,7 +201,7 @@ services:
     networks:
       - studysync
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5

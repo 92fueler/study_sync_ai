@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronRight, ArrowLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import AudioPlayer from '../components/AudioPlayer';
+import VideoPlayer from '../components/VideoPlayer';
 import QuickNotes from '../components/QuickNotes';
 import ProgressRoadmap from '../components/ProgressRoadmap';
 import { getNote } from '../api/client';
@@ -131,7 +132,15 @@ export default function NoteDetail() {
                 </div>
 
                 <div className="lg:col-span-4 space-y-6">
-                    <AudioPlayer title={note.title || 'Learning Audio'} subtitle={note.description} />
+                    <AudioPlayer
+                        title={note.title || 'Learning Audio'}
+                        subtitle={note.description}
+                        artifactId={note.artifact_id || note.id}
+                    />
+                    <VideoPlayer
+                        title={`${note.title || 'Learning'} - Video`}
+                        artifactId={note.artifact_id || note.id}
+                    />
                     <QuickNotes
                         activeSection={activeSection}
                         onSectionChange={setActiveSection}

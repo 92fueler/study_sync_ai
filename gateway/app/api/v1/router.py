@@ -45,5 +45,6 @@ api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboar
 api_router.include_router(notes_router, prefix="/notes", tags=["notes"])
 api_router.include_router(ingestion_router, prefix="/ingestion", tags=["ingestion"])
 api_router.include_router(audio_router, prefix="/audio", tags=["audio"])
+api_router.include_router(video_router, prefix="/video", tags=["video"])
 if settings.debug or settings.enable_dev_endpoints:
     api_router.include_router(dev_router, prefix="/dev", tags=["dev"])
