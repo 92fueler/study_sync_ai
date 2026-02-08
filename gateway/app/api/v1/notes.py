@@ -51,6 +51,8 @@ def _note_row_to_dict(row) -> Dict[str, Any]:
             note["tags"] = json.loads(note["tags"])
         except Exception:
             pass
+    note["has_audio"] = note.get("has_audio", False)
+    note["has_video"] = note.get("has_video", False)
     return note
 
 
@@ -194,7 +196,10 @@ async def list_notes(
         idx += 1
 
     query = f"""
-        SELECT * FROM learning_notes
+        SELECT n.*,
+               EXISTS(SELECT 1 FROM audio_artifacts a WHERE a.artifact_id = n.id) as has_audio,
+               EXISTS(SELECT 1 FROM video_artifacts v WHERE v.artifact_id = n.id) as has_video
+        FROM learning_notes n
         WHERE {' AND '.join(filters)}
         ORDER BY created_at DESC
         LIMIT ${idx} OFFSET ${idx + 1}
