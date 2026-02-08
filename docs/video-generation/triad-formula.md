@@ -1,0 +1,275 @@
+# Triad Formula: Topic-Aware Prompt Optimization
+
+## Overview
+
+The Triad Formula is a "mixing board" that optimizes Veo 3 prompts by analyzing the intersection of:
+1. **Topic Type** (Hard Science, Humanities, Soft Skills)
+2. **User Style** (from DNA preferences)
+3. **Veo 3 Capabilities** (Physics Sim, Atmospheric Audio, Human Nuance, etc.)
+
+This sits between the Style Sequencer and the final Veo prompt generation.
+
+## The Algorithm
+
+```python
+# agents/synthesis/prompt_optimizer.py
+
+from typing import Dict, List
+from enum import Enum
+
+class TopicCategory(Enum):
+    HARD_SCIENCE = "hard_science"  # Physics, Chemistry, Engineering
+    HUMANITIES = "humanities"      # History, Literature, Art
+    SOFT_SKILLS = "soft_skills"    # Business, Psychology, Communication
+
+class VeoStrength(Enum):
+    PHYSICS_SIM = "physics_simulation"
+    VISUAL_METAPHOR = "visual_metaphor"
+    ATMOSPHERIC_IMMERSION = "atmospheric_immersion"
+    TEMPORAL_FLOW = "temporal_flow"
+    HUMAN_NUANCE = "human_nuance"
+
+# Strength Selector Matrix
+STRENGTH_MATRIX = {
+    (TopicCategory.HARD_SCIENCE, 'real_world'): VeoStrength.PHYSICS_SIM,
+    (TopicCategory.HARD_SCIENCE, 'textbook'): VeoStrength.PHYSICS_SIM,
+    (TopicCategory.HARD_SCIENCE, 'analogies'): VeoStrength.VISUAL_METAPHOR,
+    (TopicCategory.HARD_SCIENCE, 'concept_map'): VeoStrength.VISUAL_METAPHOR,
+    
+    (TopicCategory.HUMANITIES, 'real_world'): VeoStrength.ATMOSPHERIC_IMMERSION,
+    (TopicCategory.HUMANITIES, 'coaching'): VeoStrength.ATMOSPHERIC_IMMERSION,
+    (TopicCategory.HUMANITIES, 'concept_map'): VeoStrength.TEMPORAL_FLOW,
+    
+    (TopicCategory.SOFT_SKILLS, 'practice_set'): VeoStrength.HUMAN_NUANCE,
+    (TopicCategory.SOFT_SKILLS, 'real_world'): VeoStrength.HUMAN_NUANCE,
+}
+
+# Veo 3 Technical Triggers for Each Strength
+VEO_TRIGGERS = {
+    VeoStrength.PHYSICS_SIM: {
+        'technical': 'Realistic soft-body physics, accurate gravity and collision',
+        'examples': ['fluid dynamics', 'zero-gravity', 'squash and stretch', 'particle systems']
+    },
+    VeoStrength.VISUAL_METAPHOR: {
+        'technical': 'Surrealist dream logic, morphing between concepts',
+        'examples': ['electricity as water', 'data as flowing rivers', 'abstract to concrete']
+    },
+    VeoStrength.ATMOSPHERIC_IMMERSION: {
+        'technical': 'Period-accurate details, high-fidelity audio, environmental storytelling',
+        'examples': ['crowd ambience', 'echoing acoustics', 'weather effects', 'era-specific sounds']
+    },
+    VeoStrength.TEMPORAL_FLOW: {
+        'technical': 'High temporal consistency, smooth time-lapse transitions',
+        'examples': ['city growth over centuries', 'plant lifecycle', 'geological changes']
+    },
+    VeoStrength.HUMAN_NUANCE: {
+        'technical': 'Subtle micro-expressions, natural body language, avoiding uncanny valley',
+        'examples': ['nervous ticking', 'eye contact', 'genuine smiles', 'hesitation']
+    }
+}
+
+# Cognitive Tone Modifiers (The "Goldilocks" Tuning)
+TONE_MODIFIERS = {
+    'textbook': {
+        'camera': 'Stable tripod shot',
+        'lighting': 'Even lighting, neutral colors',
+        'focus': 'Sharp focus throughout',
+        'pacing': 'Steady, methodical'
+    },
+    'coaching': {
+        'camera': 'Dynamic push-in camera movement',
+        'lighting': 'Warm golden hour lighting',
+        'focus': 'Selective focus on subject',
+        'pacing': 'Energetic, quick cuts'
+    },
+    'beginner_friendly': {
+        'camera': 'Slow smooth panning',
+        'lighting': 'Soft pastel palette',
+        'focus': 'Minimalist composition',
+        'pacing': 'Gentle, unhurried'
+    },
+    'key_points': {
+        'camera': 'Quick snap zooms to details',
+        'lighting': 'High contrast, bold colors',
+        'focus': 'Rapid focus shifts',
+        'pacing': 'Fast-paced, punchy'
+    }
+}
+
+
+def categorize_topic(topic: str, content: str) -> TopicCategory:
+    """
+    Analyze topic and content to determine category.
+    Uses LLM for classification.
+    """
+    # Keywords for quick classification
+    hard_science_keywords = ['physics', 'chemistry', 'engineering', 'mathematics', 
+                             'biology', 'mechanics', 'thermodynamics', 'quantum']
+    humanities_keywords = ['history', 'literature', 'art', 'philosophy', 
+                          'culture', 'society', 'revolution', 'renaissance']
+    soft_skills_keywords = ['business', 'psychology', 'communication', 'leadership',
+                           'negotiation', 'emotional', 'social', 'management']
+    
+    topic_lower = topic.lower()
+    content_lower = content.lower()
+    combined = f"{topic_lower} {content_lower}"
+    
+    # Simple keyword matching (can be enhanced with LLM)
+    if any(kw in combined for kw in hard_science_keywords):
+        return TopicCategory.HARD_SCIENCE
+    elif any(kw in combined for kw in humanities_keywords):
+        return TopicCategory.HUMANITIES
+    elif any(kw in combined for kw in soft_skills_keywords):
+        return TopicCategory.SOFT_SKILLS
+    
+    # Default to hard science for technical content
+    return TopicCategory.HARD_SCIENCE
+
+
+def select_veo_strength(topic_category: TopicCategory, user_style: str) -> VeoStrength:
+    """
+    Select the best Veo 3 strength based on topic and style.
+    """
+    key = (topic_category, user_style)
+    
+    # Direct match
+    if key in STRENGTH_MATRIX:
+        return STRENGTH_MATRIX[key]
+    
+    # Fallback logic
+    if topic_category == TopicCategory.HARD_SCIENCE:
+        return VeoStrength.PHYSICS_SIM if user_style in ['real_world', 'textbook'] else VeoStrength.VISUAL_METAPHOR
+    elif topic_category == TopicCategory.HUMANITIES:
+        return VeoStrength.ATMOSPHERIC_IMMERSION
+    else:
+        return VeoStrength.HUMAN_NUANCE
+
+
+def build_optimized_prompt(
+    topic: str,
+    narrative: str,
+    user_style: str,
+    cognitive_tone: str,
+    topic_category: TopicCategory,
+    base_veo_mode: Dict
+) -> str:
+    """
+    Build optimized Veo 3 prompt using Triad Formula.
+    
+    Template: [Cinematic Style] + [Subject Action] + [Environment] + [Veo Trigger] + [Audio Cue]
+    """
+    # Select Veo strength
+    strength = select_veo_strength(topic_category, user_style)
+    trigger = VEO_TRIGGERS[strength]
+    
+    # Get tone modifiers
+    tone_mod = TONE_MODIFIERS.get(cognitive_tone, TONE_MODIFIERS['textbook'])
+    
+    # Build prompt components
+    cinematic_style = f"{tone_mod['camera']}. {base_veo_mode['camera']}."
+    
+    subject_action = f"{narrative}"
+    
+    environment = f"{base_veo_mode['lighting']}. {tone_mod['lighting']}. {tone_mod['focus']}."
+    
+    veo_trigger = f"{trigger['technical']}."
+    
+    # Audio cue from base mode
+    audio_cue = base_veo_mode.get('audio', 'Natural ambient audio.')
+    
+    # Assemble final prompt
+    prompt_parts = [
+        f"[Cinematic Style] {cinematic_style}",
+        f"[Subject Action] {subject_action}",
+        f"[Environment/Lighting] {environment}",
+        f"[Veo 3 Technical Trigger] {veo_trigger}",
+        f"[Audio Cue] {audio_cue}",
+        f"\n\nPacing: {tone_mod['pacing']}"
+    ]
+    
+    return ' '.join(prompt_parts)
+```
+
+## Integration with Style Sequencer
+
+The Triad Formula enhances the Style Sequencer's `build_veo_prompt()` function:
+
+```python
+# In video_sequencer.py
+
+from .prompt_optimizer import categorize_topic, build_optimized_prompt
+
+def build_veo_prompt_enhanced(
+    act: Dict,
+    topic: str,
+    content: str,
+    narrative: str,
+    cognitive_tone: str,
+    segment_index: int = 0
+) -> str:
+    """
+    Enhanced version using Triad Formula.
+    """
+    # Get base Veo mode from Style Sequencer
+    base_veo_mode = act['veo_mode']
+    user_style = act['style']
+    
+    # Categorize topic
+    topic_category = categorize_topic(topic, content)
+    
+    # Build optimized prompt
+    return build_optimized_prompt(
+        topic=topic,
+        narrative=narrative,
+        user_style=user_style,
+        cognitive_tone=cognitive_tone,
+        topic_category=topic_category,
+        base_veo_mode=base_veo_mode
+    )
+```
+
+## Example Outputs
+
+### Example 1: "The Doppler Effect" (Hard Science + Analogies)
+
+**Input:**
+- Topic: "Doppler Effect"
+- Style: `analogies`
+- Cognitive Tone: `beginner_friendly`
+
+**Output Prompt:**
+```
+[Cinematic Style] Slow smooth panning. Smooth, dream-like transitions.
+[Subject Action] A glowing sound wave represented as a soft, blue gelatinous sphere moving rapidly towards the camera. As it approaches, it squashes and compresses (high frequency). As it passes, it stretches out into a long oval (low frequency).
+[Environment/Lighting] Soft, magical lighting. Soft pastel palette. Minimalist composition.
+[Veo 3 Technical Trigger] Realistic soft-body physics, accurate gravity and collision. Squash and stretch dynamics.
+[Audio Cue] A 'woosh' sound that pitches down perfectly in sync with the visual pass-by.
+
+Pacing: Gentle, unhurried
+```
+
+### Example 2: "The French Revolution" (Humanities + Real-World)
+
+**Input:**
+- Topic: "French Revolution"
+- Style: `real_world`
+- Cognitive Tone: `coaching`
+
+**Output Prompt:**
+```
+[Cinematic Style] Dynamic push-in camera movement. Handheld camera movement.
+[Subject Action] A chaotic crowd in 18th-century Paris streets. Muddy cobblestones. Citizens shouting and waving tricolor flags. Smoke rising from a distant fire.
+[Environment/Lighting] Natural lighting. Warm golden hour lighting. Selective focus on subject.
+[Veo 3 Technical Trigger] Period-accurate details, high-fidelity audio, environmental storytelling. High crowd density without blurring.
+[Audio Cue] The roar of a crowd, distinct French shouts, crackling fire, and distant bells.
+
+Pacing: Energetic, quick cuts
+```
+
+## Benefits
+
+1. **Topic-Aware**: Automatically selects best Veo 3 capabilities for subject matter
+2. **Style-Optimized**: Combines user preferences with technical strengths
+3. **Tone-Tuned**: Adjusts intensity and pacing based on cognitive tone
+4. **Consistent Quality**: Ensures prompts always leverage Veo 3's strengths
+5. **Scalable**: Easy to add new topic categories and Veo capabilities
