@@ -23,6 +23,7 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.notes import router as notes_router
 from app.api.v1.ingestion import router as ingestion_router
 from app.api.v1.audio import router as audio_router
+from app.api.v1.video import router as video_router
 from app.api.v1.dev import router as dev_router
 from app.core.config import settings
 
@@ -45,5 +46,6 @@ api_router.include_router(dashboard_router, prefix="/dashboard", tags=["dashboar
 api_router.include_router(notes_router, prefix="/notes", tags=["notes"])
 api_router.include_router(ingestion_router, prefix="/ingestion", tags=["ingestion"])
 api_router.include_router(audio_router, prefix="/audio", tags=["audio"])
+api_router.include_router(video_router, prefix="/video", tags=["video"])
 if settings.debug or settings.enable_dev_endpoints:
     api_router.include_router(dev_router, prefix="/dev", tags=["dev"])

@@ -13,6 +13,10 @@ from typing import Dict, Any, List, Optional
 import asyncpg
 from google import genai
 
+# Import video generation modules
+from .video_sequencer import sequence_video_acts, build_veo_prompt, build_transition_prompt
+from .prompt_optimizer import categorize_topic, build_optimized_prompt
+
 logger = logging.getLogger(__name__)
 if not logging.getLogger().handlers:
     logging.basicConfig(level=os.getenv("AGENT_LOG_LEVEL", "INFO"))
@@ -634,3 +638,146 @@ async def _list_artifacts_async(user_id: str, artifact_type: str) -> Dict[str, A
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
+
+
+def generate_video(
+    artifact_id: str,
+    user_id: str,
+    total_duration: int = 120  # Start with 2 minutes for testing
+) -> Dict[str, Any]:
+    """
+    Generate educational video for an artifact using Veo 3.
+    
+    Args:
+        artifact_id: Artifact to generate video for
+        user_id: User identifier
+        total_duration: Total video duration in seconds (default 120 = 2 min)
+    
+    Returns:
+        Dict with status and video generation job details
+    """
+    logger.info(f"generate_video called for artifact {artifact_id}")
+    return _run_async(_generate_video_async(artifact_id, user_id, total_duration))
+
+
+async def _generate_video_async(artifact_id: str, user_id: str, total_duration: int):
+    conn = await _get_db_connection()
+    try:
+        # 1. Get artifact content
+        artifact = await conn.fetchrow(
+            "SELECT content, artifact_type FROM artifacts WHERE id = $1",
+            artifact_id
+        )
+        if not artifact:
+            return {"status": "error", "error": "Artifact not found"}
+        
+        # 2. Get user's learning preferences
+        profile = await conn.fetchrow(
+            "SELECT style_dna FROM user_profiles WHERE user_id = $1",
+            user_id
+        )
+        
+        style_dna = profile['style_dna'] if profile else {}
+        if isinstance(style_dna, str):
+            try:
+                style_dna = json.loads(style_dna)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse style_dna for user {user_id}, using defaults")
+                style_dna = {}
+
+        user_prefs = style_dna.get('styles', ['real_world', 'concept_map'])
+        cognitive_tone = style_dna.get('cognitive_tone', 'textbook')
+        
+        # 3. Categorize topic
+        content = artifact['content'] or ""
+        topic = f"Study material - {artifact['artifact_type']}"
+        topic_category = categorize_topic(topic, content[:500])
+        
+        # 4. Sequence acts using Style Sequencer
+        acts = sequence_video_acts(user_prefs, total_duration)
+        
+        logger.info(f"Sequenced {len(acts)} acts for video", extra={
+            "artifact_id": artifact_id,
+            "acts": [act['style'] for act in acts]
+        })
+        
+        # 5. Create video_artifact record
+        video_id = await conn.fetchval(
+            """
+            INSERT INTO video_artifacts (
+                artifact_id, video_path, duration_seconds, file_size_bytes,
+                resolution, aspect_ratio, prompt, topic_category,
+                learning_style, cognitive_tone, status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            RETURNING id
+            """,
+            artifact_id,
+            f"storage/video/{artifact_id}_complete.mp4",  # Final stitched video
+            total_duration,
+            0,  # Will be updated when complete
+            "720p",
+            "16:9",
+            f"Educational video for {topic}",
+            topic_category.value,
+            ",".join([act['style'] for act in acts]),
+            cognitive_tone,
+            "generating"
+        )
+        
+        # 6. Create segment records with optimized prompts
+        segment_index = 0
+        for act in acts:
+            for i in range(act['segments']):
+                # Generate narrative for this segment
+                # TODO: In production, use LLM to generate actual narrative
+                narrative = f"Segment {i+1} of {act['segments']}: Exploring {topic} through {act['style']} perspective"
+                
+                # Build optimized prompt using Triad Formula
+                prompt = build_optimized_prompt(
+                    topic=topic,
+                    narrative=narrative,
+                    user_style=act['style'],
+                    cognitive_tone=cognitive_tone,
+                    topic_category=topic_category,
+                    base_veo_mode=act['veo_mode']
+                )
+                
+                await conn.execute(
+                    """
+                    INSERT INTO video_segments (
+                        video_artifact_id, segment_index, act_number, act_style,
+                        segment_path, duration_seconds, file_size_bytes,
+                        prompt, status
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    """,
+                    video_id,
+                    segment_index,
+                    act['act'],
+                    act['style'],
+                    f"storage/video/{artifact_id}_seg_{segment_index}.mp4",
+                    8,
+                    0,
+                    prompt,
+                    "pending"
+                )
+                segment_index += 1
+        
+        logger.info(f"Created video generation job with {segment_index} segments", extra={
+            "video_id": str(video_id),
+            "artifact_id": artifact_id
+        })
+        
+        return {
+            "status": "success",
+            "video_id": str(video_id),
+            "segments": segment_index,
+            "total_duration": total_duration,
+            "message": "Video generation started. Segments will be processed by video worker."
+        }
+        
+    except Exception as e:
+        logger.exception("generate_video failed", extra={"artifact_id": artifact_id})
+        return {"status": "error", "error": str(e)}
+    finally:
+        await conn.close()
+

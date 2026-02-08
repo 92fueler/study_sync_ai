@@ -5,7 +5,7 @@ Generates personalized learning artifacts using Gemini with Style DNA.
 """
 
 from google.adk.agents import LlmAgent
-from .tools import generate_artifact, generate_5min_summary, get_artifact, list_artifacts
+from .tools import generate_artifact, generate_5min_summary, get_artifact, list_artifacts, generate_video
 from .audio import generate_audio
 
 root_agent = LlmAgent(
@@ -82,5 +82,5 @@ ERROR HANDLING:
 - If Style DNA missing: use sensible defaults (textbook, outline, no emoji, diagrams on)
 
 Always provide helpful, accurate, and personalized study materials that help users learn effectively.""",
-    tools=[generate_artifact, generate_5min_summary, get_artifact, list_artifacts, generate_audio],
+    tools=[generate_artifact, generate_5min_summary, get_artifact, list_artifacts, generate_audio, generate_video],
 )

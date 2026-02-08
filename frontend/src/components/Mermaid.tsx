@@ -21,20 +21,20 @@ const escapeHtml = (text: string): string => {
 // Fixes common syntax issues like unquoted labels with special characters
 const sanitizeMermaidCode = (code: string): string => {
   let sanitized = code.trim()
-  
+
   // Fix node labels in square brackets that contain special characters
   // Pattern: matches [label] where label contains problematic chars but isn't quoted
   sanitized = sanitized.replace(/\[([^\]]+)\]/g, (match, label) => {
     // Trim whitespace from label
     const trimmedLabel = label.trim()
-    
+
     // Check if label contains special characters that need quoting
     // Special chars: parentheses, question marks
     // Only quote if not already quoted
-    const needsQuoting = /[()?]/.test(trimmedLabel) && 
-                         !trimmedLabel.startsWith('"') && 
-                         !trimmedLabel.endsWith('"')
-    
+    const needsQuoting = /[()?]/.test(trimmedLabel) &&
+      !trimmedLabel.startsWith('"') &&
+      !trimmedLabel.endsWith('"')
+
     if (needsQuoting) {
       // Escape any existing quotes and backslashes in the label
       const escapedLabel = trimmedLabel
@@ -44,7 +44,7 @@ const sanitizeMermaidCode = (code: string): string => {
     }
     return match
   })
-  
+
   return sanitized
 }
 
@@ -52,7 +52,7 @@ export default function Mermaid({ chart }: MermaidProps) {
   const ref = useRef<HTMLDivElement>(null)
   const mermaidRef = useRef<typeof mermaid | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isInitialized) return
@@ -62,19 +62,19 @@ export default function Mermaid({ chart }: MermaidProps) {
         // Try standard import first
         const mermaidModule = await import('mermaid')
         // Handle different export formats
-        const instance = 
-          mermaidModule.default || 
-          (mermaidModule as any).mermaid || 
+        const instance =
+          mermaidModule.default ||
+          (mermaidModule as any).mermaid ||
           mermaidModule
-        
+
         if (cancelled || !instance) return
-        
+
         // Check if initialize method exists
         if (typeof instance.initialize !== 'function') {
           console.error('Mermaid instance does not have initialize method', instance)
           return
         }
-        
+
         mermaidRef.current = instance
         instance.initialize({
           startOnLoad: false,
@@ -105,10 +105,10 @@ export default function Mermaid({ chart }: MermaidProps) {
       // Clear previous content and error state
       ref.current.innerHTML = ''
       setError(null)
-      
+
       // Clean and validate chart code
       let cleanedChart = chart.trim()
-      
+
       // Basic validation: check if chart is not empty
       if (!cleanedChart) {
         setError('Empty diagram code')
@@ -117,12 +117,12 @@ export default function Mermaid({ chart }: MermaidProps) {
         }
         return
       }
-      
+
       // Sanitize Mermaid code to fix common syntax issues
       cleanedChart = sanitizeMermaidCode(cleanedChart)
-      
+
       const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      
+
       mermaidRef.current.render(id, cleanedChart).then((result: { svg?: string }) => {
         if (ref.current && result.svg) {
           ref.current.innerHTML = result.svg
@@ -137,7 +137,7 @@ export default function Mermaid({ chart }: MermaidProps) {
         const errorMessage = error instanceof Error ? error.message : String(error)
         console.error('Mermaid rendering error:', error)
         setError(errorMessage)
-        
+
         if (ref.current) {
           // Show user-friendly error message
           const errorDisplay = `

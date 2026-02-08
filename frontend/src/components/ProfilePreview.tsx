@@ -25,29 +25,29 @@ export default function ProfilePreview({ userId }: ProfilePreviewProps) {
         return toneMap[tone] || tone;
     };
 
-    const getFormatLabel = (format: string): string => {
-        const formatMap: { [key: string]: string } = {
-            'audio': 'Audio',
-            'video': 'Video',
-            'notes': 'Notes',
-            'images': 'Images'
-        };
-        return formatMap[format] || format;
-    };
+    // const getFormatLabel = (format: string): string => {
+    //     const formatMap: { [key: string]: string } = {
+    //         'audio': 'Audio',
+    //         'video': 'Video',
+    //         'notes': 'Notes',
+    //         'images': 'Images'
+    //     };
+    //     return formatMap[format] || format;
+    // };
 
-    const getPreferenceLabel = (pref: string): string => {
-        const prefMap: { [key: string]: string } = {
-            'analogies': 'Analogies',
-            'real_world': 'Real-World Examples',
-            'concept_map': 'Concept Map',
-            'practice_set': 'Practice Set',
-            // Legacy mappings for backward compatibility
-            'quizzes': 'Practice Set',
-            'knowledge_graph': 'Concept Map',
-            'lecture': 'Real-World Examples'
-        };
-        return prefMap[pref] || pref.replace(/_/g, ' ');
-    };
+    // const getPreferenceLabel = (pref: string): string => {
+    //     const prefMap: { [key: string]: string } = {
+    //         'analogies': 'Analogies',
+    //         'real_world': 'Real-World Examples',
+    //         'concept_map': 'Concept Map',
+    //         'practice_set': 'Practice Set',
+    //         // Legacy mappings for backward compatibility
+    //         'quizzes': 'Practice Set',
+    //         'knowledge_graph': 'Concept Map',
+    //         'lecture': 'Real-World Examples'
+    //     };
+    //     return prefMap[pref] || pref.replace(/_/g, ' ');
+    // };
 
     const normalizePref = (value: string) => value.replace(/_/g, ' ');
 

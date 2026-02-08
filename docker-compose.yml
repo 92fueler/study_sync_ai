@@ -32,6 +32,9 @@ services:
       - SYNTHESIS_AGENT_URL=http://synthesis-agent:8003
       - PLANNER_AGENT_URL=http://planner-agent:8004
       - ORCHESTRATOR_AGENT_URL=http://orchestrator-agent:8005
+    volumes:
+      - ./gateway/app:/app/app
+      - ./workers:/app/workers
     depends_on:
       supabase:
         condition: service_healthy
@@ -52,6 +55,8 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+    volumes:
+      - ./agents/ingestion:/app/ingestion
     depends_on:
       supabase:
         condition: service_healthy
@@ -69,6 +74,8 @@ services:
       - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    volumes:
+      - ./agents/profile:/app/profile
     depends_on:
       supabase:
         condition: service_healthy
@@ -84,6 +91,8 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+    volumes:
+      - ./agents/synthesis:/app/synthesis
     depends_on:
       supabase:
         condition: service_healthy
@@ -99,6 +108,8 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+    volumes:
+      - ./agents/planner:/app/planner
     depends_on:
       supabase:
         condition: service_healthy
@@ -115,6 +126,8 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
       - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./agents/orchestrator:/app/orchestrator
     depends_on:
       supabase:
         condition: service_healthy
@@ -132,6 +145,7 @@ services:
       dockerfile: workers/Dockerfile
     command: python -m workers.generation_worker
     environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - REDIS_URL=redis://redis:6379
       - SYNTHESIS_AGENT_URL=http://synthesis-agent:8003
       - PROFILE_AGENT_URL=http://profile-agent:8002
@@ -200,7 +214,7 @@ services:
     networks:
       - studysync
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 5s
       timeout: 5s
       retries: 5

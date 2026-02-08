@@ -126,6 +126,8 @@ export default function KnowledgeBank() {
             timestamp: formatTimestamp(note.created_at),
             thumbnail: note.thumbnail_url || undefined,
             topic: note.topic || 'Uncategorized',
+            hasAudio: note.has_audio,
+            hasVideo: note.has_video,
         };
     };
 
@@ -391,7 +393,11 @@ export default function KnowledgeBank() {
                                         to={`/notes/${note.id ?? index + 1}`}
                                         className="block h-full"
                                     >
-                                        <LearningNoteCard {...note} />
+                                        <LearningNoteCard
+                                            {...note}
+                                            hasAudio={note.hasAudio}
+                                            hasVideo={note.hasVideo}
+                                        />
                                     </Link>
                                 ))}
                             </div>
@@ -400,10 +406,8 @@ export default function KnowledgeBank() {
                 </div>
             ) : (
                 <div>
-                    <div className="flex items-center gap-3 mb-6">
-                        <h2 className="text-2xl font-semibold text-gray-900">
-                            {filteredNotes.length > 0 ? 'Filtered Resources' : 'No matches found'}
-                        </h2>
+                    <div className="flex items-center gap-3 mb-4">
+                        <h2 className="text-2xl font-serif font-bold text-gray-900">Filtered Results</h2>
                         <span className="px-3 py-1 bg-trust-blue/10 text-trust-blue rounded-full text-sm font-medium">
                             {filteredNotes.length} results
                         </span>
@@ -417,7 +421,11 @@ export default function KnowledgeBank() {
                                     to={`/notes/${note.id ?? index + 1}`}
                                     className="block h-full"
                                 >
-                                    <LearningNoteCard {...note} />
+                                    <LearningNoteCard
+                                        {...note}
+                                        hasAudio={note.hasAudio}
+                                        hasVideo={note.hasVideo}
+                                    />
                                 </Link>
                             ))}
                         </div>
@@ -430,6 +438,6 @@ export default function KnowledgeBank() {
                     )}
                 </div>
             )}
-        </div>
+        </div >
     );
 }

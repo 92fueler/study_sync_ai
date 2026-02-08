@@ -13,6 +13,8 @@ interface LearningNoteCardProps {
     author?: string;
     timestamp: string;
     thumbnail?: string;
+    hasAudio?: boolean;
+    hasVideo?: boolean;
 }
 
 const typeConfig = {
@@ -46,6 +48,8 @@ export default function LearningNoteCard({
     author,
     timestamp,
     thumbnail,
+    hasAudio,
+    hasVideo,
 }: LearningNoteCardProps) {
     const config = typeConfig[type];
     const Icon = config.icon;
@@ -109,6 +113,18 @@ export default function LearningNoteCard({
                 <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
                     {title}
                 </h3>
+                <div className="flex gap-2 mb-2">
+                    {hasAudio && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-green-50 text-green-700 border border-green-100" title="Audio available">
+                            <Headphones className="w-3 h-3" /> Audio
+                        </span>
+                    )}
+                    {hasVideo && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-100" title="Video available">
+                            <Video className="w-3 h-3" /> Video
+                        </span>
+                    )}
+                </div>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-2 flex-1">
                     {description}
                 </p>
