@@ -210,11 +210,8 @@ async def list_notes(
         rows = await fetch(formatted_query, *params, limit, offset)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception as exc:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Database error in list_notes: {exc}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Database error: {str(exc)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database error")
 
     return {"user_id": user_id, "count": len(rows), "items": [_note_row_to_dict(row) for row in rows]}
 
@@ -265,13 +262,7 @@ async def list_note_topics(user_id: str = Query(...)):
 @router.get("/{note_id}")
 async def get_note(note_id: str, user_id: str = Query(...)):
     """Get a single note by id."""
-    query = """
-        SELECT n.*,
-               EXISTS(SELECT 1 FROM audio_artifacts a WHERE a.artifact_id = n.id) as has_audio,
-               EXISTS(SELECT 1 FROM video_artifacts v WHERE v.artifact_id = n.id) as has_video
-        FROM learning_notes n
-        WHERE n.id = $1 AND n.user_id = $2
-    """
+    query = "SELECT * FROM learning_notes WHERE id = $1 AND user_id = $2"
     try:
         row = await fetchrow(query, note_id, user_id)
     except RuntimeError as exc:

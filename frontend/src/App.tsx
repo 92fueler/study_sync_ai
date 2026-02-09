@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
 import Onboarding from './pages/Onboarding';
 import LearningPlan from './pages/LearningPlan';
 import KnowledgeBank from './pages/KnowledgeBank';
@@ -52,7 +51,7 @@ function App() {
             <Routes>
               <Route path="/" element={
                 <RequireAuth>
-                  <Dashboard />
+                  <KnowledgeBank />
                 </RequireAuth>
               } />
               <Route path="/onboarding" element={
@@ -63,7 +62,7 @@ function App() {
               <Route path="/dna" element={<Onboarding />} />
               <Route path="/plan" element={<LearningPlan />} />
               <Route path="/plans/:id" element={<PlanDetail />} />
-              <Route path="/bank" element={<KnowledgeBank />} />
+              <Route path="/bank" element={<Navigate to="/" replace />} />
               <Route path="/notes/:id" element={<NoteDetail />} />
               <Route path="/materials/:id" element={<MaterialDetail />} />
               <Route path="/content/:id" element={<ContentDetail />} />

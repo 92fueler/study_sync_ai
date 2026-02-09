@@ -79,7 +79,7 @@ export default function NoteDetail() {
             <div className="mb-8">
                 <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
                     <Link to="/" className="hover:text-trust-blue transition-colors flex items-center gap-1">
-                        <ArrowLeft className="w-3 h-3" /> Dashboard
+                        <ArrowLeft className="w-3 h-3" /> Knowledge Bank
                     </Link>
                     <ChevronRight className="w-3 h-3" />
                     <span>{note.title || 'Note'}</span>

@@ -295,7 +295,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                             className={`text-sm font-medium transition-colors ${isActive('/') ? 'text-trust-blue' : 'text-gray-600 hover:text-gray-900'
                                 }`}
                         >
-                            Dashboard
+                            Knowledge Bank
                         </Link>
                         <Link
                             to="/dna"
@@ -310,13 +310,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                 }`}
                         >
                             Learning Plan
-                        </Link>
-                        <Link
-                            to="/bank"
-                            className={`text-sm font-medium transition-colors ${isActive('/bank') ? 'text-trust-blue' : 'text-gray-600 hover:text-gray-900'
-                                }`}
-                        >
-                            Knowledge Bank
                         </Link>
                     </div>
 
