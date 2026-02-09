@@ -132,15 +132,19 @@ export default function NoteDetail() {
                 </div>
 
                 <div className="lg:col-span-4 space-y-6">
-                    <AudioPlayer
-                        title={note.title || 'Learning Audio'}
-                        subtitle={note.description}
-                        artifactId={note.artifact_id || note.id}
-                    />
-                    <VideoPlayer
-                        title={`${note.title || 'Learning'} - Video`}
-                        artifactId={note.artifact_id || note.id}
-                    />
+                    {note.has_audio && (
+                        <AudioPlayer
+                            title={note.title || 'Learning Audio'}
+                            subtitle={note.description}
+                            artifactId={note.artifact_id || note.id}
+                        />
+                    )}
+                    {note.has_video && (
+                        <VideoPlayer
+                            title={`${note.title || 'Learning'} - Video`}
+                            artifactId={note.artifact_id || note.id}
+                        />
+                    )}
                     <QuickNotes
                         activeSection={activeSection}
                         onSectionChange={setActiveSection}

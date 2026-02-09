@@ -265,7 +265,13 @@ async def list_note_topics(user_id: str = Query(...)):
 @router.get("/{note_id}")
 async def get_note(note_id: str, user_id: str = Query(...)):
     """Get a single note by id."""
-    query = "SELECT * FROM learning_notes WHERE id = $1 AND user_id = $2"
+    query = """
+        SELECT n.*,
+               EXISTS(SELECT 1 FROM audio_artifacts a WHERE a.artifact_id = n.id) as has_audio,
+               EXISTS(SELECT 1 FROM video_artifacts v WHERE v.artifact_id = n.id) as has_video
+        FROM learning_notes n
+        WHERE n.id = $1 AND n.user_id = $2
+    """
     try:
         row = await fetchrow(query, note_id, user_id)
     except RuntimeError as exc:
