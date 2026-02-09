@@ -53,6 +53,8 @@ def _note_row_to_dict(row) -> Dict[str, Any]:
             pass
     note["has_audio"] = note.get("has_audio", False)
     note["has_video"] = note.get("has_video", False)
+    if note.get("artifact_id"):
+        note["artifact_id"] = str(note["artifact_id"])
     return note
 
 
@@ -195,8 +197,18 @@ async def list_notes(
 
     query = f"""
         SELECT n.*,
-               EXISTS(SELECT 1 FROM audio_artifacts a WHERE a.artifact_id = n.id) as has_audio,
-               EXISTS(SELECT 1 FROM video_artifacts v WHERE v.artifact_id = n.id) as has_video
+               EXISTS(
+                   SELECT 1 FROM artifacts art
+                   JOIN audio_artifacts aa ON aa.artifact_id = art.id
+                   WHERE n.source_id IS NOT NULL AND n.source_id = ANY(art.content_ids)
+                     AND art.user_id = n.user_id
+               ) as has_audio,
+               EXISTS(
+                   SELECT 1 FROM artifacts art
+                   JOIN video_artifacts va ON va.artifact_id = art.id
+                   WHERE n.source_id IS NOT NULL AND n.source_id = ANY(art.content_ids)
+                     AND art.user_id = n.user_id
+               ) as has_video
         FROM learning_notes n
         WHERE {' AND '.join(filters)}
         ORDER BY created_at DESC
@@ -262,7 +274,29 @@ async def list_note_topics(user_id: str = Query(...)):
 @router.get("/{note_id}")
 async def get_note(note_id: str, user_id: str = Query(...)):
     """Get a single note by id."""
-    query = "SELECT * FROM learning_notes WHERE id = $1 AND user_id = $2"
+    query = """
+        SELECT n.*,
+               EXISTS(
+                   SELECT 1 FROM artifacts art
+                   JOIN audio_artifacts aa ON aa.artifact_id = art.id
+                   WHERE n.source_id IS NOT NULL AND n.source_id = ANY(art.content_ids)
+                     AND art.user_id = n.user_id
+               ) as has_audio,
+               EXISTS(
+                   SELECT 1 FROM artifacts art
+                   JOIN video_artifacts va ON va.artifact_id = art.id
+                   WHERE n.source_id IS NOT NULL AND n.source_id = ANY(art.content_ids)
+                     AND art.user_id = n.user_id
+               ) as has_video,
+               (
+                   SELECT art.id FROM artifacts art
+                   WHERE n.source_id IS NOT NULL AND n.source_id = ANY(art.content_ids)
+                     AND art.user_id = n.user_id
+                   ORDER BY art.created_at DESC LIMIT 1
+               ) as artifact_id
+        FROM learning_notes n
+        WHERE n.id = $1 AND n.user_id = $2
+    """
     try:
         row = await fetchrow(query, note_id, user_id)
     except RuntimeError as exc:

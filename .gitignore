@@ -40,3 +40,6 @@ notepads/
 # ADK session databases (runtime files created by Google ADK)
 **/.adk/session.db
 **/.adk/
+
+# Generated audio (shared volume; keep directory via .gitkeep)
+storage/audio/*.wav

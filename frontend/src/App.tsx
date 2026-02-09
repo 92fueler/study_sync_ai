@@ -8,7 +8,6 @@ import NoteDetail from './pages/NoteDetail';
 import StudySession from './pages/StudySession';
 import PlanDetail from './pages/PlanDetail';
 import SignUp from './pages/SignUp';
-import MaterialDetail from './pages/MaterialDetail';
 import ContentDetail from './pages/ContentDetail';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -64,7 +63,7 @@ function App() {
               <Route path="/plans/:id" element={<PlanDetail />} />
               <Route path="/bank" element={<Navigate to="/" replace />} />
               <Route path="/notes/:id" element={<NoteDetail />} />
-              <Route path="/materials/:id" element={<MaterialDetail />} />
+              <Route path="/materials/:id" element={<Navigate to="/" replace />} />
               <Route path="/content/:id" element={<ContentDetail />} />
               <Route path="/session/:sessionId" element={<StudySession />} />
             </Routes>

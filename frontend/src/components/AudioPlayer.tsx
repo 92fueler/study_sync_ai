@@ -15,6 +15,7 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
     const [audioUrl, setAudioUrl] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [loadError, setLoadError] = useState<boolean>(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Poll for audio metadata
@@ -33,9 +34,12 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
                 const metadata = await getAudioMetadata(artifactId);
 
                 if (metadata.status === 'ready' && metadata.audio_url) {
-                    // Extract filename from audio_url
+                    // Extract filename from audio_url (e.g. /api/v1/audio/xxx.wav -> xxx.wav)
                     const filename = metadata.audio_url.split('/').pop();
-                    setAudioUrl(getAudioUrl(filename));
+                    if (filename) {
+                        setAudioUrl(getAudioUrl(filename));
+                        setLoadError(false);
+                    }
                     setDuration(metadata.duration_seconds || 0);
                     setLoading(false);
                     clearInterval(pollInterval);
@@ -154,6 +158,7 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
                     {subtitle && <p className="text-indigo-200 text-xs">{subtitle}</p>}
                     {loading && <p className="text-indigo-300 text-xs mt-2">Generating audio...</p>}
                     {error && <p className="text-red-300 text-xs mt-2">{error}</p>}
+                    {loadError && !loading && <p className="text-amber-300 text-xs mt-2">Audio file not available. Try a new upload with Audio enabled in My DNA.</p>}
                 </div>
             </div>
 
@@ -168,6 +173,11 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
                 ) : error ? (
                     <div className="text-center text-gray-400 text-sm">
                         <p>{error}</p>
+                    </div>
+                ) : loadError ? (
+                    <div className="text-center text-gray-400 text-sm">
+                        <p>Audio could not be loaded.</p>
+                        <p className="text-xs mt-1">Upload a new file with Audio enabled to get playable audio.</p>
                     </div>
                 ) : (
                     <>
@@ -192,7 +202,7 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
                         <div className="flex items-center justify-center">
                             <button
                                 onClick={togglePlay}
-                                disabled={!audioUrl}
+                                disabled={!audioUrl || loadError}
                                 className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center hover:bg-indigo-500 transition-all shadow-lg shadow-indigo-500/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {isPlaying ? (
@@ -203,9 +213,15 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
                             </button>
                         </div>
 
-                        {/* Hidden audio element */}
+                        {/* Hidden audio element - onError when file missing (404) or CORS */}
                         {audioUrl && (
-                            <audio ref={audioRef} src={audioUrl} preload="metadata" />
+                            <audio
+                                ref={audioRef}
+                                src={audioUrl}
+                                preload="metadata"
+                                onError={() => setLoadError(true)}
+                                onLoadedMetadata={() => setLoadError(false)}
+                            />
                         )}
                     </>
                 )}

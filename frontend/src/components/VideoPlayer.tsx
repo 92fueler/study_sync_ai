@@ -11,7 +11,6 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
     const [videoUrl, setVideoUrl] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
     const [progress, setProgress] = useState(0);
     const [statusText, setStatusText] = useState('Initializing video...');
 
@@ -21,7 +20,7 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
             return
         }
 
-        let currentPollInterval: NodeJS.Timeout | null = null
+        let currentPollInterval: ReturnType<typeof setInterval> | null = null
         let attempts = 0
         const maxAttempts = 120 // Poll for up to 20 minutes
 
@@ -70,7 +69,6 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
 
         // Poll every 5 seconds
         currentPollInterval = setInterval(checkVideoStatus, 5000)
-        setPollInterval(currentPollInterval)
 
         return () => {
             if (currentPollInterval) clearInterval(currentPollInterval)

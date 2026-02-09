@@ -50,6 +50,9 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     fi
 fi
 
+# ── Ensure shared audio storage exists (Docker bind-mount) ────────
+mkdir -p "$PROJECT_ROOT/storage/audio"
+
 # ── Banner ──────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════╗"
 echo "║  StudySync AI — Full Stack Dev           ║"

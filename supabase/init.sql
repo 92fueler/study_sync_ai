@@ -245,7 +245,7 @@ CREATE TABLE ingestion_jobs (
   user_id TEXT NOT NULL,
   name TEXT NOT NULL,
   job_type TEXT NOT NULL CHECK (job_type IN ('pdf', 'video', 'audio', 'image', 'url', 'text')),
-  status TEXT NOT NULL CHECK (status IN ('ingesting', 'style-matching', 'ready', 'failed')),
+  status TEXT NOT NULL CHECK (status IN ('ingesting', 'generating', 'style-matching', 'ready', 'failed')),
   progress INT DEFAULT 0,
   metadata JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),

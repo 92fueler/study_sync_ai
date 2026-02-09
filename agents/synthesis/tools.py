@@ -258,10 +258,23 @@ async def _generate_artifact_async(
         
         # Get source content
         source_texts = []
+        source_title = None
+        source_topic = None
         for cid in content_ids:
-            row = await conn.fetchrow("SELECT raw_text, title FROM content_items WHERE id = $1", cid)
+            row = await conn.fetchrow("SELECT raw_text, title, topics FROM content_items WHERE id = $1", cid)
             if row and row.get("raw_text"):
                 source_texts.append(row["raw_text"])
+                if not source_title and row.get("title"):
+                    source_title = row["title"]
+                if not source_topic and row.get("topics"):
+                    topics = row["topics"]
+                    if isinstance(topics, str):
+                        try:
+                            topics = json.loads(topics)
+                        except Exception:
+                            topics = []
+                    if isinstance(topics, list) and topics:
+                        source_topic = topics[0]
         
         if not source_texts:
             logger.info("generate_artifact no source content", extra={"user_id": user_id})
@@ -430,6 +443,35 @@ Generate the 5-minute summary now:"""
                 # Don't fail the whole request if audio generation fails
                 logger.warning(f"Audio generation failed for artifact {artifact_id}: {audio_error}")
         
+        # Create a learning_note so the artifact appears in the Knowledge Bank
+        try:
+            note_title = source_title or "AI-Generated Study Notes"
+            # Derive a short description from the 5-min summary (first 200 chars)
+            note_desc = five_content[:200].strip()
+            if len(five_content) > 200:
+                note_desc += "..."
+            note_tags = json.dumps([
+                {"type": "format", "label": "AI SUMMARY"},
+                *([{"type": "topic", "label": source_topic}] if source_topic else []),
+            ])
+            await conn.execute(
+                """
+                INSERT INTO learning_notes
+                    (user_id, note_type, title, description, tags, author, topic, source_id)
+                VALUES ($1, 'text', $2, $3, $4, 'AI Summary', $5, $6)
+                """,
+                user_id,
+                note_title,
+                note_desc,
+                note_tags,
+                source_topic,
+                content_ids[0] if content_ids else None,
+            )
+            logger.info(f"Created learning_note for artifact {artifact_id}")
+        except Exception as note_err:
+            # Don't fail the generation if note creation fails
+            logger.warning(f"Failed to create learning_note for artifact {artifact_id}: {note_err}")
+        
         result = {
             "status": "success",
             "artifact_id": artifact_id,
@@ -477,9 +519,17 @@ async def _generate_5min_async(
     profile_version: int,
     style_dna: Dict[str, Any]
 ) -> Dict[str, Any]:
+    # #region agent log
+    try:
+        _dp = os.path.join(os.path.dirname(__file__), "..", ".cursor", "debug.log")
+        _e = {"timestamp": int(__import__("time").time() * 1000), "location": "tools.py:_generate_5min_async_entry", "message": "synthesis received style_dna", "data": {"style_dna_type": type(style_dna).__name__, "formats": style_dna.get("formats", "__missing__") if isinstance(style_dna, dict) else "not_dict", "content_id": content_id}, "hypothesisId": "B"}
+        open(_dp, "a").write(json.dumps(_e) + "\n")
+    except Exception:
+        pass
+    # #endregion
     conn = await _get_db_connection()
     try:
-        row = await conn.fetchrow("SELECT raw_text FROM content_items WHERE id = $1", content_id)
+        row = await conn.fetchrow("SELECT raw_text, title, topics FROM content_items WHERE id = $1", content_id)
         if not row:
             logger.info("generate_5min_summary content not found", extra={"content_id": content_id})
             return {"status": "error", "error": "Content not found"}
@@ -543,9 +593,68 @@ Generate the 5-minute summary now:"""
             user_id, [content_id], profile_version, response.text
         )
         
+        artifact_id = str(artifact_row["id"])
+        
+        # Auto-generate audio if user has 'audio' in their formats preference
+        formats = style_dna.get("formats", []) if isinstance(style_dna, dict) else []
+        # #region agent log
+        try:
+            _dp = os.path.join(os.path.dirname(__file__), "..", ".cursor", "debug.log")
+            _has_audio = "audio" in formats
+            _e = {"timestamp": int(__import__("time").time() * 1000), "location": "tools.py:audio_branch", "message": "formats and audio check", "data": {"formats": formats, "audio_in_formats": _has_audio, "artifact_id": artifact_id}, "hypothesisId": "C"}
+            open(_dp, "a").write(json.dumps(_e) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        logger.info("5min artifact created; style_dna.formats=%s", formats, extra={"artifact_id": artifact_id})
+        if "audio" in formats:
+            logger.info(f"Auto-generating audio for 5min artifact {artifact_id} (user has 'audio' in formats)")
+            try:
+                from .audio import generate_audio_from_text
+                cognitive_tone = style_dna.get("tone", "textbook")
+                asyncio.create_task(
+                    generate_audio_from_text(
+                        text=response.text,
+                        artifact_id=artifact_id,
+                        cognitive_tone=cognitive_tone
+                    )
+                )
+                logger.info(f"Audio generation task created for 5min artifact {artifact_id}")
+            except Exception as audio_error:
+                logger.warning(f"Audio generation failed for 5min artifact {artifact_id}: {audio_error}")
+        
+        # Create a learning_note so the artifact appears in the Knowledge Bank
+        try:
+            note_title = row.get("title") or "AI-Generated Summary"
+            topics_raw = row.get("topics")
+            if isinstance(topics_raw, str):
+                try:
+                    topics_raw = json.loads(topics_raw)
+                except Exception:
+                    topics_raw = []
+            first_topic = topics_raw[0] if isinstance(topics_raw, list) and topics_raw else None
+            note_desc = response.text[:200].strip()
+            if len(response.text) > 200:
+                note_desc += "..."
+            note_tags = json.dumps([
+                {"type": "format", "label": "AI SUMMARY"},
+                *([{"type": "topic", "label": first_topic}] if first_topic else []),
+            ])
+            await conn.execute(
+                """
+                INSERT INTO learning_notes
+                    (user_id, note_type, title, description, tags, author, topic, source_id)
+                VALUES ($1, 'text', $2, $3, $4, 'AI Summary', $5, $6)
+                """,
+                user_id, note_title, note_desc, note_tags, first_topic, content_id,
+            )
+            logger.info(f"Created learning_note for 5min artifact {artifact_id}")
+        except Exception as note_err:
+            logger.warning(f"Failed to create learning_note for 5min artifact {artifact_id}: {note_err}")
+        
         result = {
             "status": "success",
-            "artifact_id": str(artifact_row["id"]),
+            "artifact_id": artifact_id,
             "content": response.text,
             "estimated_minutes": 5
         }

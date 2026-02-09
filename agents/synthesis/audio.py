@@ -192,9 +192,9 @@ async def generate_audio_from_text(
             
             logger.info(f"Chunk {i+1} audio generated: {len(audio_data)} bytes")
         
-        # Generate filename
+        # Generate filename (use AUDIO_STORAGE_DIR in Docker so gateway and synthesis share same volume)
         audio_filename = f"{artifact_id or 'audio'}_{voice_name}.wav"
-        audio_dir = "storage/audio"
+        audio_dir = os.getenv("AUDIO_STORAGE_DIR", "storage/audio")
         audio_path = os.path.join(audio_dir, audio_filename)
         
         # Ensure directory exists
@@ -298,12 +298,12 @@ async def _generate_audio_async(
     Async implementation of generate_audio.
     """
     try:
-        # Fetch artifact content from database
+        # Fetch artifact content from database (artifacts has content only, no title)
         conn = await _get_db_connection()
         try:
             row = await conn.fetchrow(
                 """
-                SELECT content, title
+                SELECT content
                 FROM artifacts
                 WHERE id = $1
                 """,
@@ -317,7 +317,6 @@ async def _generate_audio_async(
                 }
             
             content = row['content']
-            title = row['title']
             
         finally:
             await conn.close()

@@ -132,13 +132,26 @@ export default function NoteDetail() {
                 </div>
 
                 <div className="lg:col-span-4 space-y-6">
-                    {note.has_audio && (
-                        <AudioPlayer
-                            title={note.title || 'Learning Audio'}
-                            subtitle={note.description}
-                            artifactId={note.artifact_id || note.id}
-                        />
-                    )}
+                    {/* Audio: right sidebar, first block (above Quick Note) */}
+                    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                        <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
+                            Audio
+                        </h3>
+                        {note.has_audio ? (
+                            <AudioPlayer
+                                title={note.title || 'Learning Audio'}
+                                subtitle={note.description}
+                                artifactId={note.artifact_id || note.id}
+                            />
+                        ) : (
+                            <div className="text-sm text-gray-500 space-y-1">
+                                <p>No audio available for this note.</p>
+                                <p className="text-xs text-gray-400 mt-2">
+                                    To get audio: enable <strong>Audio</strong> in My DNA, then upload new files. Notes from that upload will get an audio version (may take a few minutes).
+                                </p>
+                            </div>
+                        )}
+                    </div>
                     {note.has_video && (
                         <VideoPlayer
                             title={`${note.title || 'Learning'} - Video`}
