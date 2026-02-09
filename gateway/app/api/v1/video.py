@@ -11,6 +11,7 @@ import asyncpg
 import os
 import logging
 from pathlib import Path
+from typing import Optional
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ class VideoGenerateRequest(BaseModel):
     total_duration: int = 120
 
 
-def _derive_error_code(error_message: str | None) -> str | None:
+def _derive_error_code(error_message: Optional[str]) -> Optional[str]:
     if not error_message:
         return None
     lower = error_message.lower()
