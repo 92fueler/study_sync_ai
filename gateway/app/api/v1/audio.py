@@ -9,8 +9,32 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import os
+from pathlib import Path
 
 router = APIRouter()
+REPO_ROOT = Path(__file__).resolve().parents[4]
+AUDIO_DIR = REPO_ROOT / "storage" / "audio"
+
+
+def _resolve_audio_path(path_or_filename: str) -> Path:
+    """Resolve DB-stored or URL-provided audio path to a safe absolute path."""
+    value = (path_or_filename or "").strip()
+    if not value:
+        return AUDIO_DIR / "__missing__"
+
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        # Legacy rows may store "storage/audio/..." and URL input may be only filename.
+        if "/" in value or "\\" in value:
+            candidate = REPO_ROOT / candidate
+        else:
+            candidate = AUDIO_DIR / candidate.name
+    resolved = candidate.resolve()
+
+    # Prevent path traversal outside configured audio directory.
+    if AUDIO_DIR.resolve() not in resolved.parents and resolved != AUDIO_DIR.resolve():
+        return AUDIO_DIR / "__invalid__"
+    return resolved
 
 
 class AudioGenerateRequest(BaseModel):
@@ -70,13 +94,12 @@ async def stream_audio(filename: str):
     Returns:
         Audio file as streaming response
     """
-    audio_path = f"storage/audio/{filename}"
-    
-    if not os.path.exists(audio_path):
+    audio_path = _resolve_audio_path(filename)
+    if not audio_path.exists():
         raise HTTPException(status_code=404, detail="Audio file not found")
-    
+
     return FileResponse(
-        audio_path,
+        str(audio_path),
         media_type="audio/wav",
         headers={
             "Accept-Ranges": "bytes",
@@ -156,7 +179,7 @@ async def delete_audio(artifact_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="Audio not found")
         
-        audio_path = row['audio_path']
+        audio_path = _resolve_audio_path(str(row["audio_path"]))
         
         # Delete from database
         await conn.execute(
@@ -171,8 +194,8 @@ async def delete_audio(artifact_id: str):
         )
         
         # Delete file if exists
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
+        if audio_path.exists():
+            audio_path.unlink()
         
         return {"status": "success", "message": "Audio deleted"}
         

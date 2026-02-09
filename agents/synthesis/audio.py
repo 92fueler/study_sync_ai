@@ -8,12 +8,27 @@ import wave
 import os
 import logging
 from typing import Dict, Any, Optional
+from pathlib import Path
 from google.genai import types
 
 # Import shared utilities from tools module
 from .tools import _get_genai_client, _get_db_connection, _run_async
 
 logger = logging.getLogger(__name__)
+
+def _get_audio_dir() -> Path:
+    """Resolve a writable audio directory shared across local and docker runs."""
+    configured = os.getenv("AUDIO_STORAGE_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    if Path("/app/storage").exists():
+        # Docker: /app/storage is mounted from ./storage on host.
+        return Path("/app/storage/audio")
+    # Local dev: repository root inferred from agents/synthesis/audio.py.
+    return Path(__file__).resolve().parents[2] / "storage" / "audio"
+
+
+AUDIO_DIR = _get_audio_dir()
 
 
 def _get_voice_for_tone(cognitive_tone: str) -> str:
@@ -194,26 +209,25 @@ async def generate_audio_from_text(
         
         # Generate filename
         audio_filename = f"{artifact_id or 'audio'}_{voice_name}.wav"
-        audio_dir = "storage/audio"
-        audio_path = os.path.join(audio_dir, audio_filename)
-        
+        audio_path = AUDIO_DIR / audio_filename
+
         # Ensure directory exists
-        os.makedirs(audio_dir, exist_ok=True)
+        audio_path.parent.mkdir(parents=True, exist_ok=True)
         
         # Combine audio segments into single file
         if len(audio_segments) == 1:
             # Single segment - just save it
-            with wave.open(audio_path, "wb") as wf:
+            with wave.open(str(audio_path), "wb") as wf:
                 wf.setnchannels(1)
                 wf.setsampwidth(2)
                 wf.setframerate(24000)
                 wf.writeframes(audio_segments[0])
         else:
             # Multiple segments - combine them
-            await _combine_audio_segments(audio_segments, audio_path)
+            await _combine_audio_segments(audio_segments, str(audio_path))
         
         # Get file size
-        file_size = os.path.getsize(audio_path)
+        file_size = audio_path.stat().st_size
         
         # Calculate duration (bytes / (sample_rate * sample_width * channels))
         # Sum of lengths of all audio segments
@@ -236,7 +250,7 @@ async def generate_audio_from_text(
                     file_size_bytes = $5,
                     generated_at = NOW()
                 """,
-                artifact_id, audio_path, voice_name, duration_seconds, file_size
+                artifact_id, f"storage/audio/{audio_filename}", voice_name, duration_seconds, file_size
             )
             
             # Update artifacts table with audio_url
@@ -255,7 +269,7 @@ async def generate_audio_from_text(
         return {
             "status": "success",
             "audio_url": f"/api/v1/audio/{audio_filename}",
-            "audio_path": audio_path,
+            "audio_path": str(audio_path),
             "duration_seconds": duration_seconds,
             "file_size_bytes": file_size,
             "voice_name": voice_name
@@ -303,7 +317,7 @@ async def _generate_audio_async(
         try:
             row = await conn.fetchrow(
                 """
-                SELECT content, title
+                SELECT content
                 FROM artifacts
                 WHERE id = $1
                 """,
@@ -317,7 +331,6 @@ async def _generate_audio_async(
                 }
             
             content = row['content']
-            title = row['title']
             
         finally:
             await conn.close()

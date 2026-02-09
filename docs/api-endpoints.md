@@ -460,6 +460,71 @@ Get a specific artifact.
 
 ---
 
+## 🎬 Video API
+
+### `POST /api/v1/video/generate/{artifact_id}`
+Trigger video generation for an existing artifact.
+
+**Request Body**:
+```json
+{
+  "user_id": "user_123",
+  "total_duration": 120
+}
+```
+
+**Response** (200):
+```json
+{
+  "session_id": "adk-session-id",
+  "content": {
+    "parts": [
+      {"text": "Video generation started..."}
+    ],
+    "role": "model"
+  },
+  "text": "Video generation started..."
+}
+```
+
+### `GET /api/v1/video/metadata/{artifact_id}`
+Get video generation status and metadata.
+
+**Response** (200):
+```json
+{
+  "status": "generating",
+  "video_url": null,
+  "duration_seconds": 120,
+  "file_size_bytes": 0,
+  "resolution": "720p",
+  "aspect_ratio": "16:9",
+  "generated_at": "2026-02-09T07:28:08.001965+00:00",
+  "progress": 0,
+  "current_segment": 1,
+  "total_segments": 14
+}
+```
+
+When complete (`status = ready`), `video_url` is populated:
+
+```json
+{
+  "status": "ready",
+  "video_url": "/api/v1/video/<artifact_id>_complete.mp4",
+  "progress": 100
+}
+```
+
+### `GET /api/v1/video/{filename}`
+Stream generated MP4.
+
+**Response**:
+- `200` with `Content-Type: video/mp4` when file exists
+- `404` when file is not ready/not found
+
+---
+
 ## 🔄 Ingestion API
 
 ### `POST /api/v1/ingestion`

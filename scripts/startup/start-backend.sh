@@ -23,8 +23,8 @@ if ! docker-compose ps redis supabase | grep -q "Up"; then
 fi
 
 # Rebuild and start agents/workers (always rebuild in dev mode to pick up code changes)
-echo "Rebuilding and starting agents/workers (ingestion, profile, planner, synthesis, orchestrator, notification, generation, priority)..."
-docker-compose up -d --build profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent notification-worker generation-worker priority-worker
+echo "Rebuilding and starting agents/workers (ingestion, profile, planner, synthesis, orchestrator, notification, generation, priority, video)..."
+docker-compose up -d --build profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent notification-worker generation-worker priority-worker video-worker
 echo "Waiting for agents..."
 sleep 3
 

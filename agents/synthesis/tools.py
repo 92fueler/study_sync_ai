@@ -839,7 +839,7 @@ async def _generate_video_async(artifact_id: str, user_id: str, total_duration: 
                 )
                 segment_global_index += 1
         
-        logger.info(f"Created video generation job with {segment_index} segments", extra={
+        logger.info(f"Created video generation job with {segment_global_index} segments", extra={
             "video_id": str(video_id),
             "artifact_id": artifact_id
         })
@@ -847,7 +847,7 @@ async def _generate_video_async(artifact_id: str, user_id: str, total_duration: 
         return {
             "status": "success",
             "video_id": str(video_id),
-            "segments": segment_index,
+            "segments": segment_global_index,
             "total_duration": total_duration,
             "message": "Video generation started. Segments will be processed by video worker."
         }
@@ -857,4 +857,3 @@ async def _generate_video_async(artifact_id: str, user_id: str, total_duration: 
         return {"status": "error", "error": str(e)}
     finally:
         await conn.close()
-

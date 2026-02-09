@@ -9,8 +9,34 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import asyncpg
 import os
+from pathlib import Path
 
 router = APIRouter()
+REPO_ROOT = Path(__file__).resolve().parents[4]
+VIDEO_DIR = REPO_ROOT / "storage" / "video"
+
+
+def _resolve_video_path(path_or_filename: str) -> Path:
+    """Resolve DB-stored or URL-provided video path to an absolute repo-safe path."""
+    value = (path_or_filename or "").strip()
+    if not value:
+        return VIDEO_DIR / "__missing__"
+
+    candidate = Path(value)
+    if not candidate.is_absolute():
+        if "/" in value or "\\" in value:
+            candidate = REPO_ROOT / candidate
+        else:
+            candidate = VIDEO_DIR / candidate.name
+    resolved = candidate.resolve()
+    if VIDEO_DIR.resolve() not in resolved.parents and resolved != VIDEO_DIR.resolve():
+        return VIDEO_DIR / "__invalid__"
+    return resolved
+
+
+class VideoGenerateRequest(BaseModel):
+    user_id: str
+    total_duration: int = 120
 
 
 @router.get("/metadata/{artifact_id}")
@@ -72,16 +98,47 @@ async def get_video_metadata(artifact_id: str):
         await conn.close()
 
 
+@router.post("/generate/{artifact_id}")
+async def generate_video(artifact_id: str, request: VideoGenerateRequest):
+    """
+    Trigger video generation for an existing artifact.
+    """
+    from app.a2a.client import get_a2a_client
+
+    a2a_client = await get_a2a_client()
+    message = f"""Generate video for artifact {artifact_id}.
+
+Use the generate_video tool with these parameters:
+- artifact_id: {artifact_id}
+- user_id: {request.user_id}
+- total_duration: {request.total_duration}
+
+Return the video job metadata."""
+
+    response = await a2a_client.run_agent(
+        agent_name="synthesis",
+        message=message,
+        user_id=request.user_id
+    )
+
+    if response.error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Video generation failed: {response.error.get('message', 'Unknown error')}",
+        )
+
+    return response.result
+
+
 @router.get("/{filename}")
 async def stream_video(filename: str):
     """Stream video file"""
-    video_path = f"storage/video/{filename}"
-    
-    if not os.path.exists(video_path):
+    video_path = _resolve_video_path(filename)
+    if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file not found")
     
     return FileResponse(
-        video_path,
+        str(video_path),
         media_type="video/mp4",
         headers={
             "Accept-Ranges": "bytes",
