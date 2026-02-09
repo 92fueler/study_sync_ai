@@ -37,10 +37,13 @@ services:
       - ./gateway/app:/app/app
       - ./workers:/app/workers
       - ./storage/audio:/app/storage/audio
+      - ./.cursor:/app/.cursor
     depends_on:
       supabase:
         condition: service_healthy
       redis:
+        condition: service_started
+      planner-agent:
         condition: service_started
     networks:
       - studysync

@@ -227,6 +227,12 @@ export const listProposedLearningPlans = async (
   return response.data
 }
 
+export const checkLearningPlanContent = async (userId: string) => {
+  const params = new URLSearchParams({ user_id: userId })
+  const response = await apiClient.get(`/learning-plans/check-content?${params.toString()}`)
+  return response.data
+}
+
 export const approveLearningPlan = async (planId: string, userId: string) => {
   const response = await apiClient.post(`/learning-plans/${planId}/approve?user_id=${userId}`)
   return response.data
