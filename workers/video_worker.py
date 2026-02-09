@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 VIDEO_PROVIDER = os.getenv("VIDEO_PROVIDER", "placeholder").strip().lower()
 USE_PLACEHOLDER_ON_FAILURE = os.getenv("VIDEO_PLACEHOLDER_ON_FAILURE", "1").strip() in {"1", "true", "yes"}
+VEO_MODEL = os.getenv("VEO_MODEL", "veo-3.1-generate-preview").strip()
 THEMES = [
     {"name": "RAINBOW", "bg": "0x2d1b69", "a1": "0xff006e", "a2": "0x8338ec", "a3": "0x3a86ff"},
     {"name": "ICE CREAM", "bg": "0x542344", "a1": "0xffafcc", "a2": "0xffcad4", "a3": "0xbde0fe"},
@@ -26,6 +27,51 @@ THEMES = [
     {"name": "AURORA", "bg": "0x0b132b", "a1": "0x5bc0be", "a2": "0x6fffe9", "a3": "0x9b5de5"},
     {"name": "SUNSET POP", "bg": "0x370617", "a1": "0xf48c06", "a2": "0xffba08", "a3": "0xe85d04"},
 ]
+
+
+def _format_generation_error(error: Exception) -> str:
+    """Normalize provider errors into user-readable messages."""
+    message = str(error)
+    lower = message.lower()
+    if "429" in lower or "resource_exhausted" in lower or "quota" in lower:
+        return (
+            "429 RESOURCE_EXHAUSTED: Video generation quota exceeded for Veo. "
+            "Please retry later or upgrade quota."
+        )
+    return message
+
+
+async def _mark_video_failed(conn: asyncpg.Connection, segment_id: str, error_message: str) -> None:
+    """Propagate a segment failure to the parent video and remaining segments."""
+    video_id = await conn.fetchval(
+        "SELECT video_artifact_id FROM video_segments WHERE id = $1",
+        segment_id,
+    )
+    if not video_id:
+        return
+
+    await conn.execute(
+        "UPDATE video_segments SET status = 'failed', error_message = $1 WHERE id = $2",
+        error_message,
+        segment_id,
+    )
+
+    await conn.execute(
+        """
+        UPDATE video_segments
+        SET status = 'failed',
+            error_message = COALESCE(error_message, 'Aborted after video-level failure')
+        WHERE video_artifact_id = $1
+          AND status IN ('pending', 'generating')
+        """,
+        video_id,
+    )
+
+    await conn.execute(
+        "UPDATE video_artifacts SET status = 'failed', error_message = $1 WHERE id = $2",
+        error_message,
+        video_id,
+    )
 
 
 def _pick_fontfile() -> str:
@@ -56,7 +102,9 @@ async def process_video_segments():
                 SELECT vs.id, vs.video_artifact_id, vs.segment_index,
                        vs.prompt, vs.segment_path
                 FROM video_segments vs
+                JOIN video_artifacts va ON va.id = vs.video_artifact_id
                 WHERE vs.status = 'pending'
+                  AND va.status = 'generating'
                 ORDER BY vs.segment_index
                 LIMIT 1
                 """
@@ -93,8 +141,8 @@ async def process_video_segments():
                     )
                     await check_video_complete(conn, segment["id"])
                 else:
-                    operation = client.models.generate_video(
-                        model="veo-3.1",
+                    operation = client.models.generate_videos(
+                        model=VEO_MODEL,
                         prompt=segment["prompt"],
                         config={
                             "duration_seconds": 8,
@@ -103,17 +151,49 @@ async def process_video_segments():
                         },
                     )
 
-                    # Store operation ID
+                    operation_name = getattr(operation, "name", None)
+                    if operation_name:
+                        await conn.execute(
+                            "UPDATE video_segments SET operation_id = $1 WHERE id = $2",
+                            operation_name,
+                            segment["id"],
+                        )
+
+                    max_attempts = 60  # 10 minutes max
+                    for _ in range(max_attempts):
+                        if operation.done:
+                            break
+                        await asyncio.sleep(10)
+                        operation = client.operations.get(operation)
+
+                    if not operation.done:
+                        raise TimeoutError("Timed out waiting for Veo generation to complete")
+
+                    if operation.error:
+                        raise RuntimeError(str(operation.error))
+
+                    generated_videos = getattr(operation.result, "generated_videos", None) or []
+                    if not generated_videos:
+                        raise RuntimeError("Veo returned no generated videos")
+
+                    video_obj = generated_videos[0].video
+                    video_data = client.files.download(file=video_obj)
+
+                    os.makedirs(os.path.dirname(segment["segment_path"]), exist_ok=True)
+                    with open(segment["segment_path"], "wb") as f:
+                        f.write(video_data)
+
+                    file_size = len(video_data)
                     await conn.execute(
-                        "UPDATE video_segments SET operation_id = $1 WHERE id = $2",
-                        operation.name,
+                        "UPDATE video_segments SET status = 'ready', file_size_bytes = $1 WHERE id = $2",
+                        file_size,
                         segment["id"],
                     )
 
-                    # Poll for completion (in separate task)
-                    asyncio.create_task(
-                        poll_operation(segment["id"], operation.name, segment["segment_path"])
+                    logger.info(
+                        f"Segment {segment['segment_index']} complete! ({file_size} bytes)"
                     )
+                    await check_video_complete(conn, segment["id"])
                 
             except Exception as e:
                 logger.error(f"Failed to start video generation: {e}")
@@ -140,17 +220,15 @@ async def process_video_segments():
                         )
                         await check_video_complete(conn, segment["id"])
                     except Exception as fallback_error:
-                        await conn.execute(
-                            "UPDATE video_segments SET status = 'failed', error_message = $1 WHERE id = $2",
-                            f"{e}; fallback failed: {fallback_error}",
+                        await _mark_video_failed(
+                            conn,
                             segment["id"],
+                            _format_generation_error(
+                                RuntimeError(f"{e}; fallback failed: {fallback_error}")
+                            ),
                         )
                 else:
-                    await conn.execute(
-                        "UPDATE video_segments SET status = 'failed', error_message = $1 WHERE id = $2",
-                        str(e),
-                        segment["id"],
-                    )
+                    await _mark_video_failed(conn, segment["id"], _format_generation_error(e))
             
         except Exception as e:
             logger.error(f"Worker error: {e}")

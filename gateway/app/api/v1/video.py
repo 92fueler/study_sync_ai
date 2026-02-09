@@ -4,14 +4,16 @@ Video API Endpoints
 Handles video generation, metadata retrieval, and streaming.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import asyncpg
 import os
+import logging
 from pathlib import Path
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[4]
 VIDEO_DIR = REPO_ROOT / "storage" / "video"
 
@@ -39,17 +41,27 @@ class VideoGenerateRequest(BaseModel):
     total_duration: int = 120
 
 
+def _derive_error_code(error_message: str | None) -> str | None:
+    if not error_message:
+        return None
+    lower = error_message.lower()
+    if "429" in lower or "resource_exhausted" in lower or "quota" in lower:
+        return "quota_exceeded"
+    return None
+
+
 @router.get("/metadata/{artifact_id}")
 async def get_video_metadata(artifact_id: str):
     """Get video metadata for an artifact"""
     dsn = os.getenv("SUPABASE_URL")
+    logger.info("Fetching video metadata", extra={"artifact_id": artifact_id})
     conn = await asyncpg.connect(dsn)
     
     try:
         row = await conn.fetchrow(
             """
             SELECT id, video_path, duration_seconds, file_size_bytes,
-                   resolution, aspect_ratio, status, generated_at
+                   resolution, aspect_ratio, status, error_message, generated_at
             FROM video_artifacts
             WHERE artifact_id = $1
             """,
@@ -57,6 +69,7 @@ async def get_video_metadata(artifact_id: str):
         )
         
         if not row:
+            logger.info("Video metadata not found", extra={"artifact_id": artifact_id})
             raise HTTPException(status_code=404, detail="Video not found")
         
         # Calculate progress if generating
@@ -82,7 +95,7 @@ async def get_video_metadata(artifact_id: str):
         
         filename = os.path.basename(row['video_path'])
         
-        return {
+        payload = {
             "status": row['status'],
             "video_url": f"/api/v1/video/{filename}" if row['status'] == 'ready' else None,
             "duration_seconds": row['duration_seconds'],
@@ -90,20 +103,60 @@ async def get_video_metadata(artifact_id: str):
             "resolution": row['resolution'],
             "aspect_ratio": row['aspect_ratio'],
             "generated_at": str(row['generated_at']),
+            "error_message": row["error_message"],
+            "error_code": _derive_error_code(row["error_message"]),
             "progress": progress,
             "current_segment": current_segment,
             "total_segments": total_segments
         }
+        logger.info(
+            "Video metadata loaded",
+            extra={
+                "artifact_id": artifact_id,
+                "status": payload["status"],
+                "error_code": payload["error_code"],
+                "progress": payload["progress"],
+                "video_url": payload["video_url"],
+            },
+        )
+        return payload
     finally:
         await conn.close()
 
 
 @router.post("/generate/{artifact_id}")
-async def generate_video(artifact_id: str, request: VideoGenerateRequest):
+async def generate_video(
+    artifact_id: str,
+    request: VideoGenerateRequest,
+    retry: bool = Query(False),
+    force: bool = Query(False),
+):
     """
     Trigger video generation for an existing artifact.
     """
     from app.a2a.client import get_a2a_client
+
+    if retry:
+        dsn = os.getenv("SUPABASE_URL")
+        conn = await asyncpg.connect(dsn)
+        try:
+            existing = await conn.fetchrow(
+                "SELECT id, status FROM video_artifacts WHERE artifact_id = $1",
+                artifact_id,
+            )
+            if existing:
+                if existing["status"] == "generating" and not force:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Video is still generating. Use force=true to reset and retry anyway.",
+                    )
+                await conn.execute("DELETE FROM video_artifacts WHERE artifact_id = $1", artifact_id)
+                logger.info(
+                    "Cleared existing video state for retry",
+                    extra={"artifact_id": artifact_id, "prior_status": existing["status"], "force": force},
+                )
+        finally:
+            await conn.close()
 
     a2a_client = await get_a2a_client()
     message = f"""Generate video for artifact {artifact_id}.
@@ -120,13 +173,31 @@ Return the video job metadata."""
         message=message,
         user_id=request.user_id
     )
+    logger.info(
+        "Video generation trigger sent",
+        extra={
+            "artifact_id": artifact_id,
+            "user_id": request.user_id,
+            "duration": request.total_duration,
+            "retry": retry,
+            "force": force,
+        },
+    )
 
     if response.error:
+        logger.error(
+            "Video generation trigger failed",
+            extra={"artifact_id": artifact_id, "user_id": request.user_id, "error": response.error},
+        )
         raise HTTPException(
             status_code=500,
             detail=f"Video generation failed: {response.error.get('message', 'Unknown error')}",
         )
 
+    logger.info(
+        "Video generation trigger accepted",
+        extra={"artifact_id": artifact_id, "user_id": request.user_id},
+    )
     return response.result
 
 
