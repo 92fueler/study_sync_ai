@@ -1,17 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Bell, User } from 'lucide-react';
-import { API_BASE_URL, getNotificationBadge, getNotifications, markNotificationRead, searchAll } from '../api/client';
+import { useEffect, useRef, useState } from 'react';
+import { Bell, User } from 'lucide-react';
+import { API_BASE_URL, getNotificationBadge, getNotifications, markNotificationRead } from '../api/client';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
     const location = useLocation();
     const [userId, setUserId] = useState('');
-    const [isSearchOpen, setIsSearchOpen] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isSearching, setIsSearching] = useState(false);
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [searchError, setSearchError] = useState<string | null>(null);
-    const searchInputRef = useRef<HTMLInputElement>(null);
     const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
     const [notifications, setNotifications] = useState<any[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -77,53 +71,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         if (!userId) return;
         void loadBadge();
     }, [userId]);
-
-    useEffect(() => {
-        if (!isSearchOpen) return;
-        searchInputRef.current?.focus();
-    }, [isSearchOpen]);
-
-    useEffect(() => {
-        if (!isSearchOpen) return;
-        const trimmed = searchQuery.trim();
-        if (!trimmed || trimmed.length < 2) {
-            setSearchResults([]);
-            setSearchError(null);
-            return;
-        }
-        if (!userId) return;
-        setIsSearching(true);
-        setSearchError(null);
-        const timer = window.setTimeout(async () => {
-            try {
-                const response = await searchAll(userId, trimmed, 8);
-                setSearchResults(response.items || []);
-            } catch (error) {
-                console.error('Search failed', error);
-                setSearchError('Search failed');
-                setSearchResults([]);
-            } finally {
-                setIsSearching(false);
-            }
-        }, 300);
-
-        return () => window.clearTimeout(timer);
-    }, [isSearchOpen, searchQuery, userId]);
-
-    const searchHint = useMemo(() => {
-        if (searchError) return searchError;
-        if (isSearching) return 'Searching...';
-        if (searchQuery.trim().length < 2) return 'Type at least 2 characters';
-        if (!searchResults.length) return 'No matches yet';
-        return null;
-    }, [isSearching, searchError, searchQuery, searchResults.length]);
-
-    const handleSearchClose = () => {
-        setIsSearchOpen(false);
-        setSearchQuery('');
-        setSearchResults([]);
-        setSearchError(null);
-    };
 
     const handleNotificationsToggle = () => {
         setIsNotificationsOpen((prev) => !prev);
@@ -315,13 +262,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
                     <div className="flex items-center gap-4">
                         <button
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                            onClick={() => setIsSearchOpen((prev) => !prev)}
-                            aria-label="Search"
-                        >
-                            <Search className="w-5 h-5 text-gray-600" />
-                        </button>
-                        <button
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative"
                             onClick={handleNotificationsToggle}
                             aria-label="Notifications"
@@ -339,80 +279,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     </div>
                 </div>
             </nav>
-
-            {isSearchOpen && (
-                <div
-                    className="fixed inset-0 z-40 bg-black/10"
-                    onClick={handleSearchClose}
-                    role="presentation"
-                />
-            )}
-
-            {isSearchOpen && (
-                <div className="fixed top-16 w-full z-50">
-                    <div className="max-w-3xl mx-auto px-6">
-                        <div
-                            className="bg-white border border-gray-200 rounded-xl shadow-lg p-4"
-                            onClick={(event) => event.stopPropagation()}
-                            role="presentation"
-                        >
-                            <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2">
-                                <Search className="w-4 h-4 text-gray-400" />
-                                <input
-                                    ref={searchInputRef}
-                                    value={searchQuery}
-                                    onChange={(event) => setSearchQuery(event.target.value)}
-                                    onKeyDown={(event) => {
-                                        if (event.key === 'Escape') {
-                                            handleSearchClose();
-                                        }
-                                    }}
-                                    placeholder="Search notes and plans"
-                                    className="w-full text-sm text-gray-700 outline-none"
-                                />
-                            </div>
-
-                            <div className="mt-3 max-h-80 overflow-y-auto">
-                                {searchResults.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {searchResults.map((item, index) => (
-                                            <Link
-                                                key={`search-${item.type}-${item.id || index}-${index}`}
-                                                to={item.type === 'plan' ? `/plans/${item.id}` : `/notes/${item.id}`}
-                                                onClick={handleSearchClose}
-                                                className="block rounded-lg border border-gray-100 hover:border-trust-blue/40 hover:bg-blue-50/40 transition-colors p-3"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs uppercase font-semibold text-gray-400">
-                                                        {item.type}
-                                                    </span>
-                                                    {item.status && (
-                                                        <span className="text-xs text-gray-500">{item.status}</span>
-                                                    )}
-                                                </div>
-                                                <div className="text-sm font-semibold text-gray-900 mt-1">
-                                                    {item.title || 'Untitled'}
-                                                </div>
-                                                {item.description && (
-                                                    <div className="text-xs text-gray-500 mt-1 line-clamp-2">
-                                                        {item.description}
-                                                    </div>
-                                                )}
-                                            </Link>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    searchHint && (
-                                        <div className="text-xs text-gray-500 px-2 py-4 text-center">
-                                            {searchHint}
-                                        </div>
-                                    )
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {isNotificationsOpen && (
                 <div
