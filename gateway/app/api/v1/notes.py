@@ -189,11 +189,9 @@ async def list_notes(
     """List notes, optionally filtered by topic."""
     filters = ["user_id = $1"]
     params: List[Any] = [user_id]
-    idx = 2
     if topic:
-        filters.append(f"topic = ${idx}")
+        filters.append(f"topic = ${len(params) + 1}")
         params.append(topic)
-        idx += 1
 
     query = f"""
         SELECT n.*,
@@ -202,14 +200,21 @@ async def list_notes(
         FROM learning_notes n
         WHERE {' AND '.join(filters)}
         ORDER BY created_at DESC
-        LIMIT ${idx} OFFSET ${idx + 1}
+        LIMIT ${{limit_param}} OFFSET ${{offset_param}}
     """
+
     try:
-        rows = await fetch(query, *params, limit, offset)
+        limit_param = len(params) + 1
+        offset_param = len(params) + 2
+        formatted_query = query.format(limit_param=limit_param, offset_param=offset_param)
+        rows = await fetch(formatted_query, *params, limit, offset)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Database error")
+    except Exception as exc:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Database error in list_notes: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Database error: {str(exc)}")
 
     return {"user_id": user_id, "count": len(rows), "items": [_note_row_to_dict(row) for row in rows]}
 

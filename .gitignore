@@ -36,3 +36,7 @@ build/
 
 # Project specific
 notepads/
+
+# ADK session databases (runtime files created by Google ADK)
+**/.adk/session.db
+**/.adk/
