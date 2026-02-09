@@ -5,7 +5,9 @@ import AudioPlayer from '../components/AudioPlayer';
 import VideoPlayer from '../components/VideoPlayer';
 import QuickNotes from '../components/QuickNotes';
 import ProgressRoadmap from '../components/ProgressRoadmap';
-import { getNote } from '../api/client';
+import { generateVideo, getNote, getVideoMetadata } from '../api/client';
+
+type VideoGenerationStatus = 'not_requested' | 'requesting' | 'queued' | 'generating' | 'ready' | 'failed';
 
 export default function NoteDetail() {
     const { id } = useParams<{ id: string }>();
@@ -13,6 +15,18 @@ export default function NoteDetail() {
     const [note, setNote] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeSection, setActiveSection] = useState('summary');
+    const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>('not_requested');
+    const [videoStatusDetail, setVideoStatusDetail] = useState<string | null>(null);
+    const [isRetryingVideo, setIsRetryingVideo] = useState(false);
+
+    const formatVideoError = (message?: string | null) => {
+        if (!message) return 'Generation failed';
+        const lower = message.toLowerCase();
+        if (lower.includes('429') || lower.includes('resource_exhausted') || lower.includes('quota')) {
+            return 'Quota exceeded (429). Upgrade quota or retry later.';
+        }
+        return message;
+    };
 
     useEffect(() => {
         const storedUserId = localStorage.getItem('user_id');
@@ -31,16 +45,193 @@ export default function NoteDetail() {
             try {
                 setLoading(true);
                 const response = await getNote(id, userId);
+                console.log('[NoteDetail] loaded note', {
+                    id: response?.id,
+                    artifact_id: response?.artifact_id,
+                    has_video: response?.has_video,
+                    has_audio: response?.has_audio,
+                    source_id: response?.source_id,
+                });
+                const text = `${response?.title || ''} ${response?.description || ''}`.toLowerCase();
+                const requestedVideo = text.includes('video');
+                if (response?.has_video) {
+                    setVideoStatus('ready');
+                    setVideoStatusDetail('Ready to play');
+                } else if (requestedVideo && response?.artifact_id) {
+                    setVideoStatus('queued');
+                    setVideoStatusDetail('Request detected');
+                } else if (requestedVideo) {
+                    setVideoStatus('queued');
+                    setVideoStatusDetail('Waiting for artifact');
+                } else {
+                    setVideoStatus('not_requested');
+                    setVideoStatusDetail(null);
+                }
                 setNote(response || null);
             } catch (error) {
                 console.error('Failed to load note', error);
                 setNote(null);
+                setVideoStatus('failed');
+                setVideoStatusDetail('Could not load note');
             } finally {
                 setLoading(false);
             }
         };
         void loadNote();
     }, [id, userId]);
+
+    useEffect(() => {
+        if (!note || !userId || !note.artifact_id || note.has_video) return;
+        const text = `${note.title || ''} ${note.description || ''}`.toLowerCase();
+        const requestedVideo = text.includes('video');
+        if (!requestedVideo) return;
+
+        const trigger = async () => {
+            try {
+                setVideoStatus('requesting');
+                setVideoStatusDetail('Sending request');
+                console.log('[NoteDetail] triggering video generation', {
+                    note_id: note.id,
+                    artifact_id: note.artifact_id,
+                    user_id: userId,
+                });
+                await generateVideo(note.artifact_id, { user_id: userId, total_duration: 120 });
+                setVideoStatus('queued');
+                setVideoStatusDetail('Request accepted');
+            } catch (error) {
+                console.error('[NoteDetail] failed to trigger video generation', error);
+                setVideoStatus('failed');
+                setVideoStatusDetail('Request failed');
+            }
+        };
+
+        void trigger();
+    }, [note, userId]);
+
+    const mediaArtifactId = note?.artifact_id || undefined;
+    const noteRequestedVideo = Boolean(note && `${note.title || ''} ${note.description || ''}`.toLowerCase().includes('video'));
+
+    useEffect(() => {
+        if (!mediaArtifactId || !noteRequestedVideo) return;
+        if (videoStatus === 'ready' || videoStatus === 'failed') return;
+
+        let cancelled = false;
+        let pollInterval: number | null = null;
+
+        const poll = async () => {
+            try {
+                const metadata = await getVideoMetadata(mediaArtifactId);
+                if (cancelled) return;
+                const status = (metadata?.status || '').toLowerCase();
+                if (status === 'ready') {
+                    setVideoStatus('ready');
+                    setVideoStatusDetail('Ready to play');
+                    setNote((prev: any) => (prev ? { ...prev, has_video: true } : prev));
+                    if (pollInterval) window.clearInterval(pollInterval);
+                    return;
+                }
+                if (status === 'failed') {
+                    setVideoStatus('failed');
+                    setVideoStatusDetail(formatVideoError(metadata?.error_message));
+                    if (pollInterval) window.clearInterval(pollInterval);
+                    return;
+                }
+                if (status === 'generating') {
+                    setVideoStatus('generating');
+                    const progress = typeof metadata?.progress === 'number' ? `${metadata.progress}%` : null;
+                    const seg = metadata?.current_segment && metadata?.total_segments
+                        ? `Segment ${metadata.current_segment}/${metadata.total_segments}`
+                        : null;
+                    setVideoStatusDetail([progress, seg].filter(Boolean).join(' • ') || 'Generating');
+                    return;
+                }
+                setVideoStatus('queued');
+                setVideoStatusDetail('Queued');
+            } catch (error: any) {
+                // Metadata 404 during early pipeline is expected.
+                const statusCode = error?.response?.status;
+                if (statusCode === 404) {
+                    setVideoStatus((prev) => (prev === 'requesting' ? prev : 'queued'));
+                    setVideoStatusDetail('Waiting for worker');
+                    return;
+                }
+                console.error('[NoteDetail] failed polling video metadata', error);
+                const detail = error?.response?.data?.detail;
+                if (typeof detail === 'string') {
+                    setVideoStatusDetail(formatVideoError(detail));
+                }
+            }
+        };
+
+        void poll();
+        pollInterval = window.setInterval(() => {
+            void poll();
+        }, 5000);
+
+        return () => {
+            cancelled = true;
+            if (pollInterval) {
+                window.clearInterval(pollInterval);
+            }
+        };
+    }, [mediaArtifactId, noteRequestedVideo, videoStatus]);
+
+    const videoStatusLabel = (() => {
+        switch (videoStatus) {
+            case 'requesting':
+                return 'Video: Requesting';
+            case 'queued':
+                return 'Video: Queued';
+            case 'generating':
+                return 'Video: Generating';
+            case 'ready':
+                return 'Video: Ready';
+            case 'failed':
+                return 'Video: Failed';
+            default:
+                return 'Video: Not Requested';
+        }
+    })();
+
+    const videoStatusClass = (() => {
+        switch (videoStatus) {
+            case 'requesting':
+            case 'queued':
+                return 'bg-yellow-100 text-yellow-800';
+            case 'generating':
+                return 'bg-blue-100 text-blue-800';
+            case 'ready':
+                return 'bg-green-100 text-green-800';
+            case 'failed':
+                return 'bg-red-100 text-red-800';
+            default:
+                return 'bg-gray-100 text-gray-700';
+        }
+    })();
+
+    const handleRetryVideo = async () => {
+        if (!note?.artifact_id || !userId || isRetryingVideo) return;
+        try {
+            setIsRetryingVideo(true);
+            setVideoStatus('requesting');
+            setVideoStatusDetail('Retrying request');
+            await generateVideo(
+                note.artifact_id,
+                { user_id: userId, total_duration: 120 },
+                { retry: true }
+            );
+            setVideoStatus('queued');
+            setVideoStatusDetail('Retry accepted');
+            setNote((prev: any) => (prev ? { ...prev, has_video: false } : prev));
+        } catch (error: any) {
+            console.error('[NoteDetail] retry video failed', error);
+            setVideoStatus('failed');
+            const detail = error?.response?.data?.detail;
+            setVideoStatusDetail(formatVideoError(typeof detail === 'string' ? detail : 'Retry failed'));
+        } finally {
+            setIsRetryingVideo(false);
+        }
+    };
 
     if (loading) {
         return (
@@ -97,6 +288,23 @@ export default function NoteDetail() {
                         <p className="text-lg text-gray-600">
                             {note.description || 'No description provided.'}
                         </p>
+                        <div className="mt-3 flex items-center gap-2">
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${videoStatusClass}`}>
+                                {videoStatusLabel}
+                            </span>
+                            {videoStatusDetail && (
+                                <span className="text-xs text-gray-500">{videoStatusDetail}</span>
+                            )}
+                            {videoStatus === 'failed' && mediaArtifactId && (
+                                <button
+                                    className="px-3 py-1 rounded text-xs font-semibold bg-red-100 text-red-700 hover:bg-red-200 transition-colors disabled:opacity-60"
+                                    onClick={handleRetryVideo}
+                                    disabled={isRetryingVideo}
+                                >
+                                    {isRetryingVideo ? 'Retrying...' : 'Retry Video'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -135,11 +343,11 @@ export default function NoteDetail() {
                     <AudioPlayer
                         title={note.title || 'Learning Audio'}
                         subtitle={note.description}
-                        artifactId={note.artifact_id || note.id}
+                        artifactId={mediaArtifactId}
                     />
                     <VideoPlayer
                         title={`${note.title || 'Learning'} - Video`}
-                        artifactId={note.artifact_id || note.id}
+                        artifactId={mediaArtifactId}
                     />
                     <QuickNotes
                         activeSection={activeSection}

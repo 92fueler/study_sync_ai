@@ -11,9 +11,16 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
     const [videoUrl, setVideoUrl] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [pollInterval, setPollInterval] = useState<NodeJS.Timeout | null>(null);
     const [progress, setProgress] = useState(0);
     const [statusText, setStatusText] = useState('Initializing video...');
+    const formatVideoError = (message?: string | null) => {
+        if (!message) return 'Video generation failed';
+        const lower = message.toLowerCase();
+        if (lower.includes('429') || lower.includes('resource_exhausted') || lower.includes('quota')) {
+            return 'Video quota exceeded (429). Retry later or upgrade quota.';
+        }
+        return message;
+    };
 
     useEffect(() => {
         if (!artifactId) {
@@ -21,7 +28,7 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
             return
         }
 
-        let currentPollInterval: NodeJS.Timeout | null = null
+        let currentPollInterval: ReturnType<typeof setInterval> | null = null
         let attempts = 0
         const maxAttempts = 120 // Poll for up to 20 minutes
 
@@ -31,11 +38,17 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
 
                 if (metadata.status === 'ready' && metadata.video_url) {
                     const filename = metadata.video_url.split('/').pop()
+                    if (!filename) {
+                        setError('Video metadata is missing a file path')
+                        setLoading(false)
+                        if (currentPollInterval) clearInterval(currentPollInterval)
+                        return
+                    }
                     setVideoUrl(getVideoUrl(filename))
                     setLoading(false)
                     if (currentPollInterval) clearInterval(currentPollInterval)
                 } else if (metadata.status === 'failed') {
-                    setError('Video generation failed')
+                    setError(formatVideoError(metadata.error_message))
                     setLoading(false)
                     if (currentPollInterval) clearInterval(currentPollInterval)
                 } else if (metadata.status === 'generating') {
@@ -54,8 +67,14 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
                         setStatusText(`Generating segment ${current} of ${total} (${timeText} left)`)
                     }
                 }
-            } catch (err) {
+            } catch (err: any) {
                 console.log('Video not found yet, polling...')
+                const detail = err?.response?.data?.detail
+                if (typeof detail === 'string' && detail.toLowerCase().includes('429')) {
+                    setError(formatVideoError(detail))
+                    setLoading(false)
+                    if (currentPollInterval) clearInterval(currentPollInterval)
+                }
             }
             attempts++
             if (attempts >= maxAttempts) {
@@ -70,7 +89,6 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
 
         // Poll every 5 seconds
         currentPollInterval = setInterval(checkVideoStatus, 5000)
-        setPollInterval(currentPollInterval)
 
         return () => {
             if (currentPollInterval) clearInterval(currentPollInterval)

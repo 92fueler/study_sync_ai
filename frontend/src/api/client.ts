@@ -341,13 +341,40 @@ export const getAudioUrl = (filename: string) => {
 }
 
 // Video API
+export type VideoMetadata = {
+  status: string
+  video_url?: string | null
+  duration_seconds?: number | null
+  file_size_bytes?: number | null
+  resolution?: string | null
+  aspect_ratio?: string | null
+  generated_at?: string | null
+  progress?: number
+  current_segment?: number
+  total_segments?: number
+  error_message?: string | null
+  error_code?: string | null
+}
+
 export const getVideoMetadata = async (artifactId: string) => {
-  const response = await apiClient.get(`/video/metadata/${artifactId}`)
+  const response = await apiClient.get<VideoMetadata>(`/video/metadata/${artifactId}`)
+  return response.data as VideoMetadata
+}
+
+export const generateVideo = async (
+  artifactId: string,
+  payload: { user_id: string; total_duration?: number },
+  options?: { retry?: boolean; force?: boolean }
+) => {
+  const params = new URLSearchParams()
+  if (options?.retry) params.set('retry', '1')
+  if (options?.force) params.set('force', '1')
+  const query = params.toString()
+  const path = `/video/generate/${artifactId}${query ? `?${query}` : ''}`
+  const response = await apiClient.post(path, payload)
   return response.data
 }
 
 export const getVideoUrl = (filename: string) => {
   return `${API_BASE_URL}/video/${filename}`
 }
-
-
