@@ -1,14 +1,24 @@
 #!/bin/bash
-# Start frontend service
+# Start frontend dev server (Vite + React)
 # Usage: ./scripts/startup/start-frontend.sh
+#
+# This script:
+#   1. Loads nvm and switches to the correct Node.js version
+#   2. Installs/updates npm dependencies if needed
+#   3. Creates .env from .env.example if missing
+#   4. Runs the Vite dev server in the foreground
 
 set -e
 
 cd "$(dirname "$0")/../.."
+PROJECT_ROOT="$PWD"
 
-echo "=== Starting Frontend ==="
+echo "╔══════════════════════════════════════════╗"
+echo "║   StudySync AI — Frontend                ║"
+echo "╚══════════════════════════════════════════╝"
+echo ""
 
-# Helper function to load nvm
+# ── nvm helpers ─────────────────────────────────────────────────
 load_nvm() {
     export NVM_DIR="$HOME/.nvm"
     if [ -s "$NVM_DIR/nvm.sh" ]; then
@@ -18,18 +28,16 @@ load_nvm() {
     return 1
 }
 
-# Helper function to ensure nvm is loaded and use correct version
 ensure_nvm_version() {
     if load_nvm; then
         if [ -f ".nvmrc" ]; then
-            nvm use
+            nvm use 2>/dev/null || true
         fi
     fi
 }
 
-# Load nvm if available
+# ── 1. Load nvm ────────────────────────────────────────────────
 load_nvm || {
-    # Try loading from shell config files
     if [ -s "$HOME/.zshrc" ] && grep -q "NVM_DIR" "$HOME/.zshrc"; then
         load_nvm
     elif [ -s "$HOME/.bashrc" ] && grep -q "NVM_DIR" "$HOME/.bashrc"; then
@@ -37,107 +45,67 @@ load_nvm || {
     fi
 }
 
-# Check Node version and ensure correct version is used
+# ── 2. Check / switch Node version ─────────────────────────────
 NODE_VERSION=$(node --version 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1 || echo "")
 REQUIRED_VERSION="24"
 
 if [ -z "$NODE_VERSION" ] || [ "$NODE_VERSION" != "$REQUIRED_VERSION" ]; then
-    echo "WARNING: Node.js version mismatch!"
-    echo "Required: v$REQUIRED_VERSION.x"
-    if [ -n "$NODE_VERSION" ]; then
-        echo "Current: v$NODE_VERSION"
-    else
-        echo "Current: Node.js not found"
-    fi
-    
-    if load_nvm && (type nvm &>/dev/null 2>&1 || [ -s "$HOME/.nvm/nvm.sh" ]); then
-        echo "Attempting to switch to Node.js v$REQUIRED_VERSION using nvm..."
-        
-        cd frontend
+    echo "[node] Version mismatch (need v${REQUIRED_VERSION}.x, have v${NODE_VERSION:-none})"
+
+    if load_nvm && type nvm &>/dev/null 2>&1; then
+        cd "$PROJECT_ROOT/frontend"
         if [ -f .nvmrc ]; then
-            NVMRC_VERSION=$(cat .nvmrc | tr -d '[:space:]')
-            echo "Found .nvmrc with version: $NVMRC_VERSION"
-            
-            # Try to use the version, if it fails, install it
+            echo "[node] Switching to version from .nvmrc..."
             set +e
             nvm use &>/dev/null 2>&1
-            NVM_USE_EXIT_CODE=$?
+            NVM_EXIT=$?
             set -e
-            
-            if [ $NVM_USE_EXIT_CODE -ne 0 ]; then
-                echo "Version $NVMRC_VERSION not installed, installing..."
-                set +e
+            if [ $NVM_EXIT -ne 0 ]; then
+                echo "[node] Installing from .nvmrc..."
                 nvm install
-                INSTALL_EXIT=$?
-                set -e
-                
-                if [ $INSTALL_EXIT -ne 0 ]; then
-                    echo "ERROR: Failed to install Node.js version from .nvmrc"
-                    echo "Please run manually: cd frontend && nvm install && nvm use"
-                    exit 1
-                fi
-                
-                echo "Switching to installed version..."
                 nvm use
-                echo "Successfully installed and switched to Node.js version from .nvmrc"
-            else
-                echo "Switched to Node.js version from .nvmrc"
             fi
         else
-            echo "No .nvmrc found, installing v$REQUIRED_VERSION..."
-            set +e
-            nvm use $REQUIRED_VERSION &>/dev/null 2>&1
-            NVM_USE_EXIT_CODE=$?
-            set -e
-            
-            if [ $NVM_USE_EXIT_CODE -ne 0 ]; then
+            echo "[node] Installing v${REQUIRED_VERSION}..."
+            set +e; nvm use $REQUIRED_VERSION &>/dev/null 2>&1; NVM_EXIT=$?; set -e
+            if [ $NVM_EXIT -ne 0 ]; then
                 nvm install $REQUIRED_VERSION
                 nvm use $REQUIRED_VERSION
             fi
         fi
-        cd ..
+        cd "$PROJECT_ROOT"
     else
-        echo "ERROR: nvm is not available or not properly installed"
-        echo "Please install nvm: https://github.com/nvm-sh/nvm"
-        echo "Or install Node.js v$REQUIRED_VERSION manually"
+        echo "ERROR: nvm is not available. Install nvm or Node.js v${REQUIRED_VERSION} manually."
         exit 1
     fi
 fi
 
-echo "Using Node.js $(node --version)"
+echo "[node] Using $(node --version)"
 
-# Navigate to frontend directory
-cd frontend
-
-# Ensure correct Node version is used
+# ── 3. Install dependencies ────────────────────────────────────
+cd "$PROJECT_ROOT/frontend"
 ensure_nvm_version .
 
-# Check if dependencies need to be installed/updated
 if [ ! -d "node_modules" ]; then
-    echo "Installing frontend dependencies..."
-    npm install
-elif [ ! -d "node_modules/react-markdown" ] || [ ! -d "node_modules/remark-gfm" ]; then
-    echo "New dependencies detected. Installing/updating frontend dependencies..."
+    echo "[npm]  Installing dependencies..."
     npm install
 elif [ "package.json" -nt "node_modules" ] || [ "package-lock.json" -nt "node_modules" ]; then
-    echo "package.json or package-lock.json updated. Updating dependencies..."
+    echo "[npm]  Updating dependencies..."
     npm install
 fi
 
-# Check if .env exists
-if [ ! -f ".env" ]; then
-    echo "Creating frontend .env file..."
+# ── 4. Create .env if missing ──────────────────────────────────
+if [ ! -f ".env" ] && [ -f ".env.example" ]; then
     cp .env.example .env
-    echo "Frontend .env created. Edit if needed."
+    echo "[env]  Created .env from .env.example"
 fi
 
+# ── 5. Start dev server ────────────────────────────────────────
 echo ""
-echo "Starting frontend on http://localhost:3000"
+echo "       URL: http://localhost:3000"
 echo ""
-echo "Press Ctrl+C to stop"
+echo "       Press Ctrl+C to stop."
 echo ""
 
-# Ensure correct Node version before starting dev server
 ensure_nvm_version .
-
-npm run dev
+exec npm run dev

@@ -15,10 +15,27 @@ router = APIRouter()
 
 
 def _enqueue_proactive_generation(user_id: str, content_id: str):
-    """Enqueue proactive 5min generation after upload (background, not blocking)."""
+    """Enqueue proactive 5min generation after upload (background, not blocking).
+    
+    Uses RQ/Redis directly so the gateway doesn't need the workers package
+    on its Python path (workers run inside Docker containers).
+    """
     try:
-        from workers.queue import enqueue_generation
-        enqueue_generation(user_id, content_id, "5min", high_priority=False)
+        import os
+        from redis import Redis
+        from rq import Queue
+
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        conn = Redis.from_url(redis_url)
+        queue = Queue("default", connection=conn)
+        queue.enqueue(
+            "workers.jobs.generation.generate_artifact",
+            user_id=user_id,
+            content_id=content_id,
+            artifact_type="5min",
+            job_timeout="10m",
+        )
+        print(f"Enqueued generation job for content_id={content_id}")
     except Exception as e:
         # Don't fail upload if queue is unavailable
         print(f"Warning: Failed to enqueue generation: {e}")

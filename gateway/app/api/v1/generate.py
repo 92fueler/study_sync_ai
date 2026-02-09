@@ -16,39 +16,53 @@ router = APIRouter()
 
 
 def _enqueue_user_generation(user_id: str, content_id: str, artifact_type: str = "full"):
-    """Enqueue user-triggered generation to high priority queue."""
+    """Enqueue user-triggered generation to high priority queue.
+    
+    Uses RQ/Redis directly so the gateway doesn't need the workers package
+    on its Python path (workers run inside Docker containers).
+    """
+    import os
     import logging
     logger = logging.getLogger(__name__)
     
     try:
-        from workers.queue import enqueue_generation, get_redis_connection
         from redis import (
+            Redis,
             ConnectionError as RedisConnectionError,
             TimeoutError as RedisTimeoutError,
             RedisError
         )
+        from rq import Queue
+        
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        conn = Redis.from_url(redis_url)
         
         # Test Redis connection first
         try:
-            conn = get_redis_connection()
             conn.ping()
         except (RedisConnectionError, RedisTimeoutError, OSError, RedisError) as e:
             logger.error(f"Redis connection test failed: {e}", exc_info=True)
             return None
         
-        # Try to enqueue
+        # Enqueue to high priority queue using string reference
+        # The worker (running in Docker) can resolve the function path
         try:
-            return enqueue_generation(user_id, content_id, artifact_type, high_priority=True)
+            queue = Queue("high", connection=conn)
+            return queue.enqueue(
+                "workers.jobs.generation.generate_artifact",
+                user_id=user_id,
+                content_id=content_id,
+                artifact_type=artifact_type,
+                job_timeout="10m",
+            )
         except (RedisConnectionError, RedisTimeoutError, OSError, RedisError) as e:
-            # Redis connection issues during enqueue
             logger.error(f"Redis connection failed during enqueue: {e}", exc_info=True)
             return None
         except Exception as e:
-            # Other queue/enqueue errors (e.g., RQ errors)
             logger.error(f"Failed to enqueue generation: {e}", exc_info=True)
             return None
-    except ImportError as e:
-        logger.error(f"Failed to import workers.queue: {e}")
+    except Exception as e:
+        logger.error(f"Failed to enqueue generation: {e}", exc_info=True)
         return None
 
 
@@ -100,10 +114,13 @@ async def get_job_status(job_id: str):
     Test expects: 'finished' (success) or 'failed' (error)
     """
     try:
+        import os
         from rq.job import Job
-        from workers.queue import get_redis_connection
+        from redis import Redis
         
-        job = Job.fetch(job_id, connection=get_redis_connection())
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        conn = Redis.from_url(redis_url)
+        job = Job.fetch(job_id, connection=conn)
         status = job.get_status()  # Returns lowercase: 'queued', 'started', 'finished', 'failed'
         
         result = {

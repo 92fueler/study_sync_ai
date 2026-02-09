@@ -1,59 +1,98 @@
 #!/bin/bash
-# Start backend (gateway) service
+# Start backend: Docker services (infra + agents + workers) then gateway locally
 # Usage: ./scripts/startup/start-backend.sh
+#
+# This script:
+#   1. Starts Redis + Postgres (waits for health check)
+#   2. Builds + starts all ADK agents and RQ workers in Docker
+#   3. Activates Python venv + loads .env
+#   4. Runs the gateway (uvicorn) in the foreground with hot-reload
 
 set -e
 
 cd "$(dirname "$0")/../.."
+PROJECT_ROOT="$PWD"
 
-echo "=== Starting Backend (Gateway + Agents) ==="
+echo "╔══════════════════════════════════════════╗"
+echo "║   StudySync AI — Backend                 ║"
+echo "╚══════════════════════════════════════════╝"
+echo ""
 
-# Check if .env exists
+# ── .env check ──────────────────────────────────────────────────
 if [ ! -f .env ]; then
-    echo "WARNING: .env file not found!"
-    echo "Copy .env.example to .env and fill in your credentials"
+    echo "WARNING: .env not found. Copy .env.example to .env and fill in credentials."
 fi
 
-# Start infrastructure if not running
-if ! docker-compose ps redis supabase | grep -q "Up"; then
-    echo "Starting infrastructure (Redis, Postgres)..."
-    docker-compose up -d redis supabase
-    echo "Waiting for infrastructure..."
-    sleep 3
-fi
+# ── Load environment variables ──────────────────────────────────
+load_env() {
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        set -a
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
+}
+load_env
 
-# Rebuild and start agents/workers (always rebuild in dev mode to pick up code changes)
-echo "Rebuilding and starting agents/workers (ingestion, profile, planner, synthesis, orchestrator, notification, generation, priority)..."
-docker-compose up -d --build profile-agent ingestion-agent planner-agent synthesis-agent orchestrator-agent notification-worker generation-worker priority-worker
-echo "Waiting for agents..."
+# ── 1. Start infrastructure ────────────────────────────────────
+echo "[1/4] Starting infrastructure (Redis, Postgres)..."
+docker-compose up -d redis supabase
+
+echo "       Waiting for Postgres to be healthy..."
+RETRIES=0
+MAX_RETRIES=30
+until docker-compose exec -T supabase pg_isready -U postgres > /dev/null 2>&1; do
+    RETRIES=$((RETRIES + 1))
+    if [ $RETRIES -ge $MAX_RETRIES ]; then
+        echo "ERROR: Postgres did not become ready in time."
+        exit 1
+    fi
+    sleep 1
+done
+echo "       Postgres ready."
+
+# ── 2. Build + start agents and workers ─────────────────────────
+echo ""
+echo "[2/4] Building and starting agents + workers..."
+docker-compose up -d --build \
+    ingestion-agent profile-agent planner-agent synthesis-agent orchestrator-agent \
+    generation-worker notification-worker priority-worker
+
+echo "       Waiting for agents to start..."
 sleep 3
 
-# Check if virtual environment exists
-if [ -d ".venv" ]; then
-    echo "Activating virtual environment..."
-    source .venv/bin/activate
-elif [ -d "venv" ]; then
-    echo "Activating virtual environment..."
-    source venv/bin/activate
+echo ""
+echo "       Docker services:"
+docker-compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null \
+    || docker-compose ps
+
+# ── 3. Activate Python virtual environment ──────────────────────
+echo ""
+echo "[3/4] Setting up Python environment..."
+if [ -d "$PROJECT_ROOT/.venv" ]; then
+    source "$PROJECT_ROOT/.venv/bin/activate"
+    echo "       Activated .venv"
+elif [ -d "$PROJECT_ROOT/venv" ]; then
+    source "$PROJECT_ROOT/venv/bin/activate"
+    echo "       Activated venv"
 else
-    echo "WARNING: No virtual environment found. Creating one..."
-    python3 -m venv .venv
-    source .venv/bin/activate
-    echo "Installing dependencies..."
-    pip install -r gateway/requirements.txt
+    echo "       No venv found — creating .venv..."
+    python3 -m venv "$PROJECT_ROOT/.venv"
+    source "$PROJECT_ROOT/.venv/bin/activate"
+    pip install -r "$PROJECT_ROOT/gateway/requirements.txt"
 fi
 
-# Load environment variables
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
-fi
+# Reload env vars into the activated venv shell
+load_env
 
+# ── 4. Start gateway ───────────────────────────────────────────
 echo ""
-echo "Starting gateway on http://localhost:8000"
-echo "API docs available at http://localhost:8000/docs"
+echo "[4/4] Starting gateway..."
 echo ""
-echo "Press Ctrl+C to stop"
+echo "       URL:  http://localhost:8000"
+echo "       Docs: http://localhost:8000/docs"
+echo ""
+echo "       Press Ctrl+C to stop the gateway."
 echo ""
 
-cd gateway
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+cd "$PROJECT_ROOT/gateway"
+exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

@@ -58,8 +58,10 @@ async def health_check():
     
     # Check Redis connectivity
     try:
-        from workers.queue import get_redis_connection
-        conn = get_redis_connection()
+        import os
+        from redis import Redis
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        conn = Redis.from_url(redis_url)
         conn.ping()
         health["redis"] = "connected"
     except Exception as e:
