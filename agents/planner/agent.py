@@ -77,6 +77,7 @@ YOUR CAPABILITIES:
    - Uses semantic clustering and prioritization to create structured plans
    - Returns multiple plan options with modules, sequencing, and time estimates
    - Plans are ready to be saved with status='proposed'
+   - When you have called this tool and received a result, you MUST include the exact tool output (the dict with "status" and "plans" keys) in your response inside a markdown code block: ```json ... ``` so the caller can parse it. Do not omit or summarize the plans array.
 
 OUTPUT FORMAT:
 When providing study plans, return structured information:

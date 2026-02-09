@@ -1,0 +1,49 @@
+# Git and IDE
+.git
+.gitignore
+.idea
+.vscode
+.cursor
+
+# Dependencies and build artifacts (large)
+node_modules
+**/node_modules
+frontend/dist
+frontend/build
+**/dist
+**/build
+
+# Python caches and venvs
+__pycache__
+**/__pycache__
+*.py[cod]
+.venv
+venv
+.pytest_cache
+.coverage
+htmlcov
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime and generated data (large; not needed to build images)
+storage
+**/.adk
+**/session.db
+*.wav
+*.mp3
+
+# Docs and tests (not needed in runtime image)
+docs
+*.md
+!README.md
+tests
+playwright-report
+test-results
+
+# Misc
+notepads
+*.log
+.DS_Store

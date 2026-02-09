@@ -4,11 +4,10 @@ import { getAudioMetadata, getAudioUrl } from '../api/client';
 
 interface AudioPlayerProps {
     title: string;
-    subtitle?: string;
     artifactId?: string;
 }
 
-export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayerProps) {
+export default function AudioPlayer({ title, artifactId }: AudioPlayerProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -155,7 +154,6 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
                         )}
                     </div>
                     <h3 className="text-base font-bold leading-tight mb-1">{title}</h3>
-                    {subtitle && <p className="text-indigo-200 text-xs">{subtitle}</p>}
                     {loading && <p className="text-indigo-300 text-xs mt-2">Generating audio...</p>}
                     {error && <p className="text-red-300 text-xs mt-2">{error}</p>}
                     {loadError && !loading && <p className="text-amber-300 text-xs mt-2">Audio file not available. Try a new upload with Audio enabled in My DNA.</p>}
