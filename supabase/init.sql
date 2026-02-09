@@ -245,7 +245,7 @@ CREATE TABLE ingestion_jobs (
   user_id TEXT NOT NULL,
   name TEXT NOT NULL,
   job_type TEXT NOT NULL CHECK (job_type IN ('pdf', 'video', 'audio', 'image', 'url', 'text')),
-  status TEXT NOT NULL CHECK (status IN ('ingesting', 'style-matching', 'ready', 'failed')),
+  status TEXT NOT NULL CHECK (status IN ('ingesting', 'generating', 'style-matching', 'ready', 'failed')),
   progress INT DEFAULT 0,
   metadata JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -369,3 +369,87 @@ CREATE TRIGGER trigger_profile_version
   BEFORE UPDATE OF style_dna, goals ON user_profiles
   FOR EACH ROW
   EXECUTE FUNCTION update_profile_version();
+
+-- ===========================================
+-- 14. AUDIO ARTIFACTS (Audio generation metadata)
+-- ===========================================
+CREATE TABLE IF NOT EXISTS audio_artifacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    artifact_id UUID NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+    audio_path TEXT NOT NULL,
+    voice_name TEXT NOT NULL,
+    duration_seconds FLOAT NOT NULL,
+    file_size_bytes INTEGER NOT NULL,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(artifact_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_audio_artifacts_artifact_id ON audio_artifacts(artifact_id);
+
+-- Add audio_url column to artifacts table if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'artifacts' AND column_name = 'audio_url'
+    ) THEN
+        ALTER TABLE artifacts ADD COLUMN audio_url TEXT;
+    END IF;
+END $$;
+
+-- ===========================================
+-- 15. VIDEO ARTIFACTS (Video generation metadata)
+-- ===========================================
+CREATE TABLE IF NOT EXISTS video_artifacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    artifact_id UUID NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+    video_path TEXT NOT NULL,
+    duration_seconds FLOAT NOT NULL,
+    file_size_bytes BIGINT NOT NULL,
+    resolution TEXT NOT NULL, -- '720p', '1080p', '4k'
+    aspect_ratio TEXT NOT NULL, -- '16:9', '9:16'
+    prompt TEXT NOT NULL,
+    topic_category TEXT, -- 'hard_science', 'humanities', 'soft_skills'
+    learning_style TEXT, -- Style used for generation (real_world, analogies, etc.)
+    cognitive_tone TEXT, -- Tone used (textbook, coaching, etc.)
+    operation_id TEXT, -- Veo async operation ID
+    status TEXT DEFAULT 'generating', -- 'generating', 'ready', 'failed'
+    error_message TEXT,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(artifact_id)
+);
+
+CREATE TABLE IF NOT EXISTS video_segments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    video_artifact_id UUID NOT NULL REFERENCES video_artifacts(id) ON DELETE CASCADE,
+    segment_index INTEGER NOT NULL,
+    act_number INTEGER NOT NULL,
+    act_style TEXT NOT NULL, -- 'real_world', 'analogies', 'concept_map', 'practice_set'
+    segment_path TEXT NOT NULL,
+    duration_seconds FLOAT NOT NULL,
+    file_size_bytes BIGINT NOT NULL,
+    prompt TEXT NOT NULL,
+    operation_id TEXT, -- Veo async operation ID for this segment
+    status TEXT DEFAULT 'generating', -- 'generating', 'ready', 'failed'
+    error_message TEXT,
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(video_artifact_id, segment_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_video_artifacts_artifact_id ON video_artifacts(artifact_id);
+CREATE INDEX IF NOT EXISTS idx_video_artifacts_status ON video_artifacts(status);
+CREATE INDEX IF NOT EXISTS idx_video_artifacts_operation_id ON video_artifacts(operation_id);
+CREATE INDEX IF NOT EXISTS idx_video_segments_video_artifact_id ON video_segments(video_artifact_id);
+CREATE INDEX IF NOT EXISTS idx_video_segments_status ON video_segments(status);
+CREATE INDEX IF NOT EXISTS idx_video_segments_operation_id ON video_segments(operation_id);
+
+-- Add video_url column to artifacts table if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'artifacts' AND column_name = 'video_url'
+    ) THEN
+        ALTER TABLE artifacts ADD COLUMN video_url TEXT;
+    END IF;
+END $$;

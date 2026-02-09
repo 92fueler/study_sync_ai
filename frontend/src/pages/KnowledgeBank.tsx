@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, FileText, Video, Headphones, Link as LinkIcon, Filter } from 'lucide-react';
+import { Upload, FileText, Video, Headphones, Link as LinkIcon, Filter, Loader2 } from 'lucide-react';
 import LearningNoteCard from '../components/LearningNoteCard';
-import { createIngestionJob, listArtifacts, listNotes, listNoteTopics, uploadFiles } from '../api/client';
+import apiClient, { createIngestionJob, listNotes, listNoteTopics, uploadFiles } from '../api/client';
 
 type NoteTag = {
     type: 'format' | 'style' | 'topic';
@@ -17,7 +17,7 @@ export default function KnowledgeBank() {
     const [selectedFormat, setSelectedFormat] = useState<string>('all');
     const [selectedStyle, setSelectedStyle] = useState<string>('all');
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
-    const [materials, setMaterials] = useState<any[]>([]);
+    const [processingJobs, setProcessingJobs] = useState<any[]>([]);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const messageTimerRef = useRef<number | null>(null);
@@ -53,10 +53,9 @@ export default function KnowledgeBank() {
 
     const loadNotes = async (resolvedUserId: string) => {
         try {
-            const [notesResponse, topicsResponse, materialsResponse] = await Promise.all([
+            const [notesResponse, topicsResponse] = await Promise.all([
                 listNotes(resolvedUserId, { limit: 60 }),
                 listNoteTopics(resolvedUserId),
-                listArtifacts(resolvedUserId),
             ]);
             setNotesData(notesResponse.items || []);
             const topicMap: Record<string, number> = {};
@@ -64,20 +63,45 @@ export default function KnowledgeBank() {
                 if (topic.topic) topicMap[topic.topic] = topic.count || 0;
             });
             setTopicCounts(topicMap);
-            setMaterials(materialsResponse.items || []);
         } catch (error) {
             console.error('Failed to load knowledge bank', error);
+        }
+    };
+
+    const loadProcessingJobs = async (resolvedUserId: string) => {
+        try {
+            const response = await apiClient.get(`/ingestion/processing?user_id=${resolvedUserId}&limit=10`);
+            const data = response.data;
+            const now = Date.now();
+            const active = (data.items || []).filter((j: any) => {
+                if (j.status !== 'ingesting' && j.status !== 'generating') return false;
+                // Auto-expire stale jobs older than 60 seconds
+                const created = j.created_at ? new Date(j.created_at).getTime() : 0;
+                return now - created < 60_000;
+            });
+            setProcessingJobs(active);
+            if (active.length > 0) {
+                setTimeout(() => {
+                    loadProcessingJobs(resolvedUserId);
+                    void loadNotes(resolvedUserId);
+                }, 5000);
+            }
+        } catch {
+            // Silently ignore — processing queue is optional UI
         }
     };
 
     useEffect(() => {
         if (!userId) return;
         void loadNotes(userId);
+        void loadProcessingJobs(userId);
     }, [userId]);
 
     useEffect(() => {
         if (!userId) return;
         const handler = () => {
+            // Generation is done — clear processing queue and refresh notes
+            setProcessingJobs([]);
             void loadNotes(userId);
         };
         window.addEventListener('notifications:ready', handler);
@@ -176,30 +200,27 @@ export default function KnowledgeBank() {
                 </p>
             </div>
 
-            <div className="mb-10">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-2xl font-semibold text-gray-900">Generated Materials</h2>
-                    <span className="text-sm text-gray-500">AI-generated summaries and notes</span>
-                </div>
-                {materials.length === 0 ? (
-                    <div className="text-sm text-gray-500">No generated materials yet.</div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-                        {materials.slice(0, 6).map((artifact: any) => (
-                            <Link key={artifact.id} to={`/materials/${artifact.id}`} className="block">
-                                <LearningNoteCard
-                                    type="pdf"
-                                    title={artifact.title || `Material (${artifact.artifact_type})`}
-                                    description={`Generated on ${new Date(artifact.created_at).toLocaleDateString()}`}
-                                    tags={[{ type: 'format', label: 'AI MATERIAL' }]}
-                                    author="AI"
-                                    timestamp={new Date(artifact.created_at).toLocaleTimeString()}
-                                />
-                            </Link>
+            {processingJobs.length > 0 && (
+                <div className="mb-8">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-3">Processing</h2>
+                    <div className="flex gap-3 overflow-x-auto pb-2">
+                        {processingJobs.map((job: any) => (
+                            <div
+                                key={job.id}
+                                className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg min-w-[220px] shrink-0"
+                            >
+                                <Loader2 className="w-4 h-4 text-trust-blue animate-spin shrink-0" />
+                                <div className="min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">{job.name || 'Processing...'}</p>
+                                    <p className="text-xs text-blue-600">
+                                        {job.status === 'generating' ? 'Generating notes...' : 'Processing...'}
+                                    </p>
+                                </div>
+                            </div>
                         ))}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             <div className="mb-10">
                 <div className="border-2 border-dashed border-blue-300 rounded-xl p-12 bg-blue-50/50 hover:bg-blue-50 transition-colors">
@@ -257,14 +278,15 @@ export default function KnowledgeBank() {
                                                 user_id: userId,
                                                 name: item.filename || 'Upload',
                                                 job_type: 'pdf',
-                                                status: 'ingesting',
+                                                status: 'generating',
                                                 progress: 0,
                                                 metadata: { source: 'knowledge-bank', task_id: item.task_id, content_id: item.content_id },
                                             }))
                                         );
                                     }
-                                    showStatus('Files uploaded successfully.');
+                                    showStatus('Files uploaded — generating study notes...');
                                     await loadNotes(userId);
+                                    void loadProcessingJobs(userId);
                                 } catch (error) {
                                     console.error('Knowledge bank upload failed', error);
                                     showStatus('Upload failed. Please try again.');
@@ -275,7 +297,7 @@ export default function KnowledgeBank() {
                             }}
                         />
                         {uploadProgress !== null && (
-                            <div className="mb-4 w-full max-w-md">
+                            <div className="mb-4 w-full">
                                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
                                     <span>Uploading</span>
                                     <span>{uploadProgress}%</span>

@@ -450,13 +450,14 @@ async def _create_notification_async(
     try:
         payload = dict(data or {})
         payload.setdefault("channel", channel)
+        channel_val = channel or "in_app"
         row = await conn.fetchrow(
             """
-            INSERT INTO notifications (user_id, title, body, data)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO notifications (user_id, channel, title, body, data)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id
             """,
-            user_id, title, body, json.dumps(payload) if payload else None
+            user_id, channel_val, title, body, json.dumps(payload) if payload else None
         )
         result = {"status": "success", "notification_id": str(row["id"])}
         logger.info("create_notification completed", extra={"user_id": user_id, "notification_id": result["notification_id"]})

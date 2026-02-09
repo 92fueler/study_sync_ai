@@ -168,19 +168,6 @@ export default function Onboarding() {
                             })}
                         </div>
 
-                        {/* Custom Style Input */}
-                        <div className="bg-gray-50 rounded-xl p-5 border border-gray-200">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Describe your preferred style (1 sentence)
-                            </label>
-                            <input
-                                type="text"
-                                value={customStyle}
-                                onChange={(e) => setCustomStyle(e.target.value)}
-                                placeholder="e.g., 'I prefer detailed historical context with modern-day comparisons.'"
-                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-trust-blue focus:border-trust-blue outline-none transition-shadow"
-                            />
-                        </div>
                     </div>
 
                     <div className="mb-8">

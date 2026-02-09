@@ -59,18 +59,24 @@ Return the audio metadata."""
     return response.result
 
 
+def _audio_storage_dir() -> str:
+    """Base directory for audio files (shared with synthesis-agent in Docker)."""
+    return os.getenv("AUDIO_STORAGE_DIR", "storage/audio")
+
+
 @router.get("/{filename}")
 async def stream_audio(filename: str):
     """
     Stream audio file.
     
     Args:
-        filename: Audio filename (e.g., artifact-id_Kore.wav)
+        filename: Audio filename (e.g., artifact-id_Puck.wav)
     
     Returns:
         Audio file as streaming response
     """
-    audio_path = f"storage/audio/{filename}"
+    base = _audio_storage_dir()
+    audio_path = os.path.join(base, filename)
     
     if not os.path.exists(audio_path):
         raise HTTPException(status_code=404, detail="Audio file not found")
@@ -119,6 +125,7 @@ async def get_audio_metadata(artifact_id: str):
         filename = os.path.basename(row['audio_path'])
         
         return {
+            "status": "ready",
             "audio_url": f"/api/v1/audio/{filename}",
             "voice_name": row['voice_name'],
             "duration_seconds": row['duration_seconds'],
