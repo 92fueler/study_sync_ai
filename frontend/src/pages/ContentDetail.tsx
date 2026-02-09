@@ -51,7 +51,7 @@ export default function ContentDetail() {
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="text-red-600">{errorMessage || 'Content not found.'}</div>
         <Link to="/" className="text-trust-blue hover:underline mt-4 inline-block">
-          ← Back to Dashboard
+          ← Back to Knowledge Bank
         </Link>
       </div>
     );
@@ -65,7 +65,7 @@ export default function ContentDetail() {
     <div className="max-w-5xl mx-auto px-6 py-8">
       <div className="mb-6 flex items-center gap-2 text-sm text-gray-500">
         <Link to="/" className="hover:text-trust-blue flex items-center gap-1">
-          <ArrowLeft className="w-3 h-3" /> Dashboard
+          <ArrowLeft className="w-3 h-3" /> Knowledge Bank
         </Link>
         <span>/</span>
         <span>Content</span>

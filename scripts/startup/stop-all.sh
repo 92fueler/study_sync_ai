@@ -1,57 +1,89 @@
 #!/bin/bash
-# Stop all StudySync AI services
+# Stop all StudySync AI services (local processes + Docker containers)
 # Usage: ./scripts/startup/stop-all.sh
-
-set -e
+#
+# Stops:
+#   1. tmux session (kills all panes, clears history)
+#   2. Docker containers (frees port 8000 if gateway ran in Docker)
+#   3. Gateway (uvicorn on port 8000)
+#   4. Frontend (vite/node on port 3000)
+#
+# Database volumes are preserved by default.
 
 cd "$(dirname "$0")/../.."
 
-echo "=== Stopping StudySync AI ==="
+# Docker Compose: prefer "docker compose" (v2) then "docker-compose" (v1)
+if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    DC="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    DC="docker-compose"
+else
+    DC=""
+fi
 
-# Stop tmux session if it exists (from start-fullstack-dev.sh)
+echo "╔══════════════════════════════════════════╗"
+echo "║  StudySync AI — Stop All                 ║"
+echo "╚══════════════════════════════════════════╝"
+echo ""
+
+# ── 1. Kill tmux session ───────────────────────────────────────
 SESSION_NAME="studysync-fullstack"
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-    echo "Stopping tmux session: $SESSION_NAME"
+    echo "[tmux]     Killing session '$SESSION_NAME'..."
     tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    echo "           Done."
+else
+    echo "[tmux]     No active session."
 fi
 
-# Stop backend (uvicorn) processes
-echo "Stopping backend (gateway) processes..."
-# Kill by port 8000
-if lsof -ti:8000 > /dev/null 2>&1; then
-    echo "  Killing process on port 8000..."
-    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
-fi
-# Also kill by process name (uvicorn)
-if pgrep -f "uvicorn.*app.main:app" > /dev/null 2>&1; then
-    echo "  Killing uvicorn processes..."
-    pkill -9 -f "uvicorn.*app.main:app" 2>/dev/null || true
-fi
-
-# Stop frontend (npm dev server) processes
-echo "Stopping frontend processes..."
-# Kill by port 3000
-if lsof -ti:3000 > /dev/null 2>&1; then
-    echo "  Killing process on port 3000..."
-    lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-fi
-# Also kill vite/dev server processes (more specific to avoid killing other node processes)
-if pgrep -f "vite|npm.*dev|node.*dev" > /dev/null 2>&1; then
-    echo "  Killing frontend dev server processes..."
-    # Be more specific - only kill if running from frontend directory
-    pkill -9 -f "vite" 2>/dev/null || true
-    # Kill npm run dev processes in frontend directory
-    ps aux | grep -E "npm.*run.*dev|node.*vite" | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null || true
+# ── 2. Stop Docker containers first (frees port 8000 if gateway ran in Docker) ─
+echo ""
+echo "[docker]   Stopping containers (preserving volumes)..."
+if [ -n "$DC" ]; then
+    if $DC ps -q 2>/dev/null | grep -q .; then
+        $DC down --remove-orphans 2>/dev/null
+        echo "           All containers stopped."
+    else
+        echo "           No running containers."
+    fi
+else
+    echo "           Docker Compose not found, skipping."
 fi
 
-# Stop Docker services (preserve volumes to keep database data)
-echo "Stopping Docker services (preserving volumes to keep database data)..."
-docker-compose down --remove-orphans
+# ── 3. Stop Gateway (port 8000) ────────────────────────────────
+echo ""
+echo "[gateway]  Stopping port 8000..."
+PIDS=$(lsof -ti:8000 2>/dev/null || true)
+if [ -n "$PIDS" ]; then
+    echo "$PIDS" | xargs kill 2>/dev/null || true
+    sleep 2
+    PIDS=$(lsof -ti:8000 2>/dev/null || true)
+    [ -n "$PIDS" ] && echo "$PIDS" | xargs kill -9 2>/dev/null || true
+    echo "           Stopped."
+else
+    echo "           Not running."
+fi
+# Orphan uvicorn processes
+pgrep -f "uvicorn.*app.main:app" 2>/dev/null | xargs kill -9 2>/dev/null || true
 
+# ── 4. Stop Frontend (port 3000) ───────────────────────────────
+echo ""
+echo "[frontend] Stopping port 3000..."
+PIDS=$(lsof -ti:3000 2>/dev/null || true)
+if [ -n "$PIDS" ]; then
+    echo "$PIDS" | xargs kill 2>/dev/null || true
+    sleep 1
+    PIDS=$(lsof -ti:3000 2>/dev/null || true)
+    [ -n "$PIDS" ] && echo "$PIDS" | xargs kill -9 2>/dev/null || true
+    echo "           Stopped."
+else
+    echo "           Not running."
+fi
+
+# ── Summary ────────────────────────────────────────────────────
 echo ""
 echo "=== All services stopped ==="
-echo "Backend (port 8000) and Frontend (port 3000) processes have been terminated."
-echo "Docker containers stopped. Volumes preserved - your database data is safe!"
 echo ""
-echo "Note: Your materials and data are preserved in Docker volumes."
-echo "To completely remove volumes (WARNING: deletes all data), use: docker-compose down -v"
+echo "  Volumes preserved. To wipe data:  docker-compose down -v"
+echo "  To restart:  ./scripts/startup/start-fullstack-dev.sh"
+echo "  Fresh start: ./scripts/startup/start-fullstack-dev.sh --fresh"

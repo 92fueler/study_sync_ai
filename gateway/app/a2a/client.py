@@ -230,6 +230,7 @@ class A2AClient:
             if response.status_code == 200:
                 text = response.text
                 result = {"session_id": session_id}
+                all_parts = []
                 for line in text.split("\n"):
                     if line.startswith("data: "):
                         try:
@@ -237,21 +238,20 @@ class A2AClient:
                             if event.get("content"):
                                 result["content"] = event["content"]
                                 parts = event["content"].get("parts", [])
-                                for part in parts:
-                                    if "text" in part:
-                                        result["text"] = part["text"]
-                                    # Also capture function_response if present (ADK tool results)
-                                    if "function_response" in part:
-                                        if "function_responses" not in result:
-                                            result["function_responses"] = []
-                                        result["function_responses"].append(part["function_response"])
-                                    # Also check for function_call (tool invocation)
-                                    if "function_call" in part:
-                                        if "function_calls" not in result:
-                                            result["function_calls"] = []
-                                        result["function_calls"].append(part["function_call"])
+                                all_parts.extend(parts)
                         except json.JSONDecodeError:
                             pass
+                for part in all_parts:
+                    if "text" in part:
+                        result["text"] = part["text"]
+                    if "function_response" in part:
+                        if "function_responses" not in result:
+                            result["function_responses"] = []
+                        result["function_responses"].append(part["function_response"])
+                    if "function_call" in part:
+                        if "function_calls" not in result:
+                            result["function_calls"] = []
+                        result["function_calls"].append(part["function_call"])
                 return A2AResponse.success(result, session_id)
             else:
                 return A2AResponse.error_response(-32002, f"Agent error: {response.text}")

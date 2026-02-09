@@ -20,6 +20,23 @@ from app.a2a.client import get_a2a_client
 
 logger = logging.getLogger(__name__)
 
+# #region agent log
+def _debug_log(message: str, data: dict, hypothesis_id: str = ""):
+    """Write NDJSON to debug log and logger for generate_suggested_plans tracing."""
+    import time
+    payload = {"location": "learning_plans.py:generate_suggested_plans", "message": message, "data": data, "timestamp": int(time.time() * 1000)}
+    if hypothesis_id:
+        payload["hypothesisId"] = hypothesis_id
+    logger.info("[DEBUG_GEN_PLANS] %s %s", message, data)
+    for path in ("/app/.cursor/debug.log", "/app/app/.cursor_debug_gen_plans.log", "/Users/jianw./Desktop/study_sync_ai/.cursor/debug.log"):
+        try:
+            with open(path, "a") as f:
+                f.write(json.dumps(payload) + "\n")
+            break
+        except Exception:
+            continue
+# #endregion
+
 
 def _extract_structured(text: str) -> dict:
     """Extract JSON-like object from agent response text."""
@@ -41,6 +58,34 @@ def _extract_structured(text: str) -> dict:
         except Exception:
             pass
     return {}
+
+
+def _extract_plans_json_brace_match(text: str) -> Optional[dict]:
+    """Extract JSON object containing 'plans' array using brace matching (handles nested JSON)."""
+    if not text or '"plans"' not in text:
+        return None
+    idx = text.find('"plans"')
+    if idx == -1:
+        return None
+    # Find the opening brace of the object that contains "plans" (last unclosed { before "plans")
+    start = text.rfind("{", 0, idx)
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    obj = json.loads(text[start : i + 1])
+                    if isinstance(obj, dict) and "plans" in obj:
+                        return obj
+                except json.JSONDecodeError:
+                    pass
+                break
+    return None
 
 router = APIRouter()
 
@@ -269,6 +314,24 @@ async def list_proposed_learning_plans(
 
     plans = [_plan_row_to_dict(row) for row in rows]
     return {"user_id": user_id, "count": len(plans), "items": plans}
+
+
+@router.get("/check-content")
+async def check_learning_plan_content(user_id: str = Query(...)):
+    """Check if user has processed content available for generating learning plans."""
+    query = """
+        SELECT COUNT(*) AS cnt
+        FROM user_materials
+        WHERE user_id = $1 AND status = 'PROCESSED'
+    """
+    try:
+        row = await fetchrow(query, user_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Database error")
+    count = int(row["cnt"]) if row else 0
+    return {"has_content": count > 0, "processed_count": count}
 
 
 @router.get("/{plan_id}")
@@ -589,18 +652,26 @@ async def generate_suggested_plans(
     Uses semantic clustering and prioritization to create structured learning plans
     with modules, sequencing, and time estimates. Plans are created with status='proposed'.
     """
+    # #region agent log
+    _debug_log("generate_suggested_plans entry", {"user_id": user_id, "context_mode": context_mode, "max_plans": max_plans}, "entry")
+    # #endregion
     try:
         a2a_client = await get_a2a_client()
-        
+        # #region agent log
+        _debug_log("a2a_client obtained", {}, "H1")
+        # #endregion
         # Call Planner Agent to generate plans
         # Use explicit tool call format that ADK agents understand
         try:
             response = await a2a_client.run_agent(
                 agent_name="planner",
-                message=f"Call the generate_learning_plan tool with user_id={user_id}, context_mode={context_mode}, and max_plans={max_plans}. Return the plans result.",
+                message=f"Call the generate_learning_plan tool with user_id={user_id}, context_mode={context_mode}, and max_plans={max_plans}. You must respond with the exact tool output JSON (the object with 'status' and 'plans' keys) inside a markdown code block: ```json ... ``` so it can be parsed. Return nothing else except that code block.",
                 user_id=user_id
             )
         except Exception as e:
+            # #region agent log
+            _debug_log("run_agent exception", {"error": str(e), "type": type(e).__name__}, "H1")
+            # #endregion
             logger.error(f"Failed to call planner agent: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
@@ -613,6 +684,9 @@ async def generate_suggested_plans(
                 error_msg = response.error.get('message', str(response.error))
             else:
                 error_msg = str(response.error)
+            # #region agent log
+            _debug_log("response.error set", {"error_msg": error_msg}, "H2")
+            # #endregion
             logger.error(f"Planner agent returned error: {error_msg}")
             raise HTTPException(
                 status_code=500,
@@ -622,11 +696,23 @@ async def generate_suggested_plans(
         # Extract plans from agent response
         result = response.result or {}
         text = result.get("text", "")
-        
+
+        # Try ADK alternate shapes: result.output or result.tool_output
+        for key in ("output", "tool_output"):
+            candidate = result.get(key)
+            if isinstance(candidate, dict) and "plans" in candidate:
+                plans_data = candidate
+                break
+        else:
+            plans_data = None
+
         # Check if the tool returned an error status
         # The planner tool can return {"status": "error", "error": "..."}
         if isinstance(result, dict) and result.get("status") == "error":
             error_msg = result.get("error", "Unknown error from planner agent")
+            # #region agent log
+            _debug_log("result.status==error", {"error_msg": error_msg}, "H5")
+            # #endregion
             logger.error(f"Planner agent tool returned error: {error_msg}")
             raise HTTPException(
                 status_code=500,
@@ -636,8 +722,7 @@ async def generate_suggested_plans(
         # Look for JSON in function_response or text
         content = result.get("content", {})
         parts = content.get("parts", [])
-        plans_data = None
-        
+
         # First, try to get from function_response (ADK tool result)
         # Check function_responses array (if ADK client extracted them)
         function_responses = result.get("function_responses", [])
@@ -708,28 +793,23 @@ async def generate_suggested_plans(
             if isinstance(parsed, dict) and "plans" in parsed:
                 plans_data = parsed
             
-            # Second try: Extract from markdown code blocks
-            if not plans_data:
-                if "```json" in text:
-                    start = text.find("```json") + 7
-                    end = text.find("```", start)
-                    if end > start:
-                        try:
-                            extracted = json.loads(text[start:end].strip())
-                            if isinstance(extracted, dict) and "plans" in extracted:
+            # Second try: Extract from markdown code blocks (try every block)
+            if not plans_data and "```" in text:
+                for match in re.finditer(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL):
+                    block = match.group(1).strip()
+                    if not block:
+                        continue
+                    try:
+                        extracted = json.loads(block)
+                        if isinstance(extracted, dict):
+                            if "plans" in extracted:
                                 plans_data = extracted
-                        except json.JSONDecodeError:
-                            pass
-                elif "```" in text:
-                    start = text.find("```") + 3
-                    end = text.find("```", start)
-                    if end > start:
-                        try:
-                            extracted = json.loads(text[start:end].strip())
-                            if isinstance(extracted, dict) and "plans" in extracted:
-                                plans_data = extracted
-                        except json.JSONDecodeError:
-                            pass
+                                break
+                            if "response" in extracted and isinstance(extracted["response"], dict) and "plans" in extracted["response"]:
+                                plans_data = extracted["response"]
+                                break
+                    except json.JSONDecodeError:
+                        continue
             
             # Third try: Parse entire text as JSON (might be pure JSON)
             if not plans_data:
@@ -745,19 +825,18 @@ async def generate_suggested_plans(
                 except json.JSONDecodeError:
                     pass
             
-            # Fourth try: Look for JSON object with "plans" key using regex (more flexible)
+            # Fourth try: Extract JSON with "plans" using brace matching (handles nested structures)
             if not plans_data:
-                # Try to find a JSON object containing "plans" array
-                json_match = re.search(r'\{[^{}]*"plans"\s*:\s*\[.*?\][^{}]*\}', text, re.DOTALL)
-                if json_match:
-                    try:
-                        extracted = json.loads(json_match.group())
-                        if isinstance(extracted, dict) and "plans" in extracted:
-                            plans_data = extracted
-                    except json.JSONDecodeError:
-                        pass
+                extracted = _extract_plans_json_brace_match(text)
+                if extracted:
+                    plans_data = extracted
         
         if not plans_data or "plans" not in plans_data:
+            # #region agent log
+            _debug_log("parse fail: plans_data missing", {"result_keys": list(result.keys()), "text_len": len(text), "text_preview": (text or "")[:200]}, "H3")
+            # #endregion
+            # Log full result at DEBUG for troubleshooting
+            logger.debug("Planner agent full result when parsing failed: %s", json.dumps(result, default=str)[:2000])
             # Log detailed debug info for troubleshooting
             debug_info = {
                 "result_keys": list(result.keys()),
@@ -850,10 +929,16 @@ async def generate_suggested_plans(
                 created_plans.append(created_plan.get("plan"))
                 
             except Exception as e:
+                # #region agent log
+                _debug_log("create_learning_plan exception", {"error": str(e), "type": type(e).__name__}, "H4")
+                # #endregion
                 logger.error(f"Failed to create plan: {e}", exc_info=True)
                 # Continue with other plans even if one fails
         
         if len(created_plans) == 0:
+            # #region agent log
+            _debug_log("no plans created", {"created_count": 0}, "H4")
+            # #endregion
             raise HTTPException(
                 status_code=500,
                 detail="Failed to create any plans. Check logs for details."
@@ -868,6 +953,9 @@ async def generate_suggested_plans(
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
+        # #region agent log
+        _debug_log("unexpected exception", {"error": str(e), "type": type(e).__name__}, "H4")
+        # #endregion
         # Catch any other unexpected exceptions
         logger.error(f"Unexpected error in generate_suggested_plans: {e}", exc_info=True)
         raise HTTPException(

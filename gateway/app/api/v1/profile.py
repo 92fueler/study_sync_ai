@@ -4,11 +4,14 @@ Profile API Endpoints
 Handles user profile CRUD operations via ADK Profile Agent.
 """
 
-from typing import Optional, List
-from fastapi import APIRouter, HTTPException
+import json
+from typing import Optional, List, Any, Dict
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.a2a.client import get_a2a_client
+from app.db import fetchrow
 
 router = APIRouter()
 
@@ -67,6 +70,41 @@ async def create_profile(profile: ProfileCreate):
         raise HTTPException(status_code=400, detail=response.error.get("message"))
     
     return {"success": True, "response": response.result}
+
+
+@router.get("/for-generation")
+async def get_profile_for_generation(user_id: str = Query(..., alias="user_id")):
+    """
+    Return merged profile (user_profiles + user_settings) for workers.
+    Used by the generation worker so it gets style_dna.formats from Learning DNA
+    without relying on the profile agent's LLM response.
+    """
+    default_style_dna: Dict[str, Any] = {"format_pref": "outline", "tone": "textbook", "uses_emoji": False, "prefers_diagrams": True}
+    try:
+        row = await fetchrow("SELECT * FROM user_profiles WHERE user_id = $1", user_id)
+        if not row:
+            style_dna = dict(default_style_dna)
+        else:
+            style_dna = json.loads(row["style_dna"]) if row.get("style_dna") else dict(default_style_dna)
+            if not isinstance(style_dna, dict):
+                style_dna = dict(default_style_dna)
+        settings_row = await fetchrow("SELECT study_preferences FROM user_settings WHERE user_id = $1", user_id)
+        if settings_row and settings_row.get("study_preferences"):
+            prefs = settings_row["study_preferences"]
+            if isinstance(prefs, str):
+                try:
+                    prefs = json.loads(prefs)
+                except Exception:
+                    prefs = {}
+            if isinstance(prefs, dict):
+                if "formats" in prefs and prefs["formats"] is not None:
+                    style_dna["formats"] = prefs["formats"]
+                if prefs.get("cognitive_tone"):
+                    style_dna["tone"] = prefs["cognitive_tone"]
+        profile_version = int(row["profile_version"]) if row and row.get("profile_version") else 1
+        return {"status": "success", "user_id": user_id, "style_dna": style_dna, "profile_version": profile_version}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{user_id}")

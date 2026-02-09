@@ -27,6 +27,7 @@ services:
       - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       - REDIS_URL=redis://redis:6379
+      - AUDIO_STORAGE_DIR=/app/storage/audio
       - INGESTION_AGENT_URL=http://ingestion-agent:8001
       - PROFILE_AGENT_URL=http://profile-agent:8002
       - SYNTHESIS_AGENT_URL=http://synthesis-agent:8003
@@ -35,10 +36,14 @@ services:
     volumes:
       - ./gateway/app:/app/app
       - ./workers:/app/workers
+      - ./storage/audio:/app/storage/audio
+      - ./.cursor:/app/.cursor
     depends_on:
       supabase:
         condition: service_healthy
       redis:
+        condition: service_started
+      planner-agent:
         condition: service_started
     networks:
       - studysync
@@ -91,8 +96,11 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - SUPABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase:5432/studysync
+      - AUDIO_STORAGE_DIR=/app/storage/audio
     volumes:
       - ./agents/synthesis:/app/synthesis
+      - ./.cursor:/app/.cursor
+      - ./storage/audio:/app/storage/audio
     depends_on:
       supabase:
         condition: service_healthy
@@ -128,6 +136,12 @@ services:
       - REDIS_URL=redis://redis:6379
     volumes:
       - ./agents/orchestrator:/app/orchestrator
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 8005)); s.close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
     depends_on:
       supabase:
         condition: service_healthy
@@ -147,11 +161,15 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - REDIS_URL=redis://redis:6379
+      - GATEWAY_URL=http://gateway:8000
       - SYNTHESIS_AGENT_URL=http://synthesis-agent:8003
       - PROFILE_AGENT_URL=http://profile-agent:8002
       - ORCHESTRATOR_AGENT_URL=http://orchestrator-agent:8005
+    volumes:
+      - ./.cursor:/app/.cursor
     depends_on:
       - redis
+      - gateway
       - synthesis-agent
       - profile-agent
     networks:
@@ -167,8 +185,10 @@ services:
       - REDIS_URL=redis://redis:6379
       - ORCHESTRATOR_AGENT_URL=http://orchestrator-agent:8005
     depends_on:
-      - redis
-      - orchestrator-agent
+      redis:
+        condition: service_started
+      orchestrator-agent:
+        condition: service_healthy
     networks:
       - studysync
     restart: unless-stopped
@@ -181,9 +201,14 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379
       - PLANNER_AGENT_URL=http://planner-agent:8004
+      - ORCHESTRATOR_AGENT_URL=http://orchestrator-agent:8005
     depends_on:
-      - redis
-      - planner-agent
+      redis:
+        condition: service_started
+      planner-agent:
+        condition: service_started
+      orchestrator-agent:
+        condition: service_healthy
     networks:
       - studysync
     restart: unless-stopped

@@ -3,7 +3,7 @@ import { Plus, ChevronLeft, ChevronRight, Sparkles, Trash2 } from 'lucide-react'
 import LearningPlanCard from '../components/LearningPlanCard';
 import ProposedPlanCard from '../components/ProposedPlanCard';
 import PlanDetailsModal from '../components/PlanDetailsModal';
-import { approveLearningPlan, createLearningPlan, listLearningPlans, listProposedLearningPlans, generateSuggestedPlans, pauseLearningPlan, resumeLearningPlan, deleteLearningPlan } from '../api/client';
+import { approveLearningPlan, createLearningPlan, listLearningPlans, listProposedLearningPlans, generateSuggestedPlans, pauseLearningPlan, resumeLearningPlan, deleteLearningPlan, getLearningPlan, checkLearningPlanContent } from '../api/client';
 import { useNavigate } from 'react-router-dom';
 
 export default function LearningPlan() {
@@ -17,6 +17,7 @@ export default function LearningPlan() {
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [deleteConfirmPlan, setDeleteConfirmPlan] = useState<string | null>(null);
+    const [hasContent, setHasContent] = useState<boolean | null>(null);
 
     useEffect(() => {
         const storedUserId = localStorage.getItem('user_id');
@@ -49,6 +50,13 @@ export default function LearningPlan() {
 
     useEffect(() => {
         if (!userId) return;
+        checkLearningPlanContent(userId)
+            .then((res: { has_content?: boolean }) => setHasContent(res?.has_content ?? false))
+            .catch(() => { /* On network/API failure leave hasContent null so we don't disable Generate or show "no content" banner */ });
+    }, [userId]);
+
+    useEffect(() => {
+        if (!userId) return;
         const handler = () => {
             void loadPlans(userId);
         };
@@ -65,35 +73,50 @@ export default function LearningPlan() {
     }, [statusMessage]);
 
     const handlePlanClick = (plan: any, isProposed: boolean) => {
-        const timelineFromItems = Array.isArray(plan.items)
-            ? plan.items.map((item: any, index: number) => ({
-                week: index + 1,
-                topic: item.title || `Module ${index + 1}`,
-            }))
-            : [];
-        const timelineFromDetails = Array.isArray(plan.details?.timeline)
-            ? plan.details.timeline
-            : Array.isArray(plan.details?.proposed_timeline)
-                ? plan.details.proposed_timeline
+        const buildModalPlan = (p: any) => {
+            const timelineFromItems = Array.isArray(p.items)
+                ? p.items.map((item: any, index: number) => ({
+                    week: index + 1,
+                    topic: item.title || `Module ${index + 1}`,
+                }))
                 : [];
-        const proposedTimeline = timelineFromDetails.length ? timelineFromDetails : timelineFromItems;
-        const modalPlan = {
-            id: plan.id,
-            title: plan.title,
-            description: plan.description,
-            isProposed,
-            duration: plan.details?.duration || plan.estimated_time || 'Unknown',
-            timeline: plan.details?.timeline_label || plan.estimatedTime || plan.estimated_time || 'Unknown',
-            intensity: plan.difficulty || 'Moderate Pace',
-            formatBreakdown: plan.details?.format_breakdown || {
-                audioSessions: 0,
-                deepDives: 0,
-            },
-            proposedTimeline,
-            proposedSchedule: plan.details?.proposed_schedule,
+            const timelineFromDetails = Array.isArray(p.details?.timeline)
+                ? p.details.timeline
+                : Array.isArray(p.details?.proposed_timeline)
+                    ? p.details.proposed_timeline
+                    : [];
+            const proposedTimeline = timelineFromDetails.length ? timelineFromDetails : timelineFromItems;
+            return {
+                id: p.id,
+                title: p.title,
+                description: p.description,
+                isProposed,
+                duration: p.details?.duration || p.estimated_time || 'Unknown',
+                timeline: p.details?.timeline_label || p.estimatedTime || p.estimated_time || 'Unknown',
+                intensity: p.difficulty || 'Moderate Pace',
+                formatBreakdown: p.details?.format_breakdown || {
+                    audioSessions: 0,
+                    deepDives: 0,
+                },
+                proposedTimeline,
+                proposedSchedule: p.details?.proposed_schedule,
+            };
         };
-        setSelectedPlan(modalPlan);
-        setIsModalOpen(true);
+        if (plan?.id && userId && !Array.isArray(plan.items)) {
+            getLearningPlan(plan.id, userId)
+                .then((res: any) => {
+                    const fullPlan = res?.plan ? { ...res.plan, items: res.items ?? [] } : plan;
+                    setSelectedPlan(buildModalPlan(fullPlan));
+                    setIsModalOpen(true);
+                })
+                .catch(() => {
+                    setSelectedPlan(buildModalPlan(plan));
+                    setIsModalOpen(true);
+                });
+        } else {
+            setSelectedPlan(buildModalPlan(plan));
+            setIsModalOpen(true);
+        }
     };
 
     const handleApprove = async () => {
@@ -190,14 +213,28 @@ export default function LearningPlan() {
         try {
             const response = await generateSuggestedPlans(userId, 'growth', 3);
             if (response.status === 'success' && response.plans_generated > 0) {
+                if (Array.isArray(response.plans) && response.plans.length > 0) {
+                    setProposedPlansData((prev) => [...response.plans, ...prev]);
+                }
                 await loadPlans(userId);
                 setStatusMessage(`Successfully generated ${response.plans_generated} suggested plan(s)!`);
             } else {
-                setStatusMessage('No plans could be generated. Make sure you have content uploaded.');
+                setStatusMessage('No plans could be generated. Upload content and try again.');
             }
         } catch (error: any) {
             console.error('Failed to generate suggested plans', error);
-            setStatusMessage(error.response?.data?.detail || 'Failed to generate suggested plans. Please try again.');
+            const detail = error.response?.data?.detail;
+            if (typeof detail === 'string' && (detail.includes('No content') || detail.includes('No content available'))) {
+                setStatusMessage('Upload content first, then try again.');
+            } else if (typeof detail === 'string' && (detail.includes('planner agent') || detail.includes('Failed to communicate'))) {
+                setStatusMessage('Planner service is unavailable. Try again later.');
+            } else if (typeof detail === 'string' && detail.includes('Could not parse plans')) {
+                setStatusMessage('Generation completed but we couldn\'t read the result. Try again.');
+            } else if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+                setStatusMessage('Connection failed. Check your network and try again.');
+            } else {
+                setStatusMessage(detail || 'Failed to generate suggested plans. Please try again.');
+            }
         } finally {
             setIsGenerating(false);
         }
@@ -268,7 +305,7 @@ export default function LearningPlan() {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleGenerateSuggested}
-                        disabled={isGenerating}
+                        disabled={isGenerating || hasContent === false}
                         className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-trust-blue text-trust-blue rounded-lg hover:bg-blue-50 transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                         <Sparkles className={`w-5 h-5 ${isGenerating ? 'animate-pulse' : ''}`} />
@@ -283,6 +320,12 @@ export default function LearningPlan() {
                     </button>
                 </div>
             </div>
+
+            {hasContent === false && (
+                <div className="mb-6 rounded-md bg-amber-50 text-amber-800 text-sm px-4 py-2">
+                    Upload and process content first to generate plans.
+                </div>
+            )}
 
             {statusMessage && (
                 <div className="mb-6 rounded-md bg-blue-50 text-blue-700 text-sm px-4 py-2">

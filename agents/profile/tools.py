@@ -123,12 +123,38 @@ async def _get_profile_async(user_id: str) -> Dict[str, Any]:
         row = await conn.fetchrow(
             "SELECT * FROM user_profiles WHERE user_id = $1", user_id
         )
+        default_style_dna = {"format_pref": "outline", "tone": "eli5", "uses_emoji": False, "prefers_diagrams": True}
         if not row:
             logger.info("get_profile default", extra={"user_id": user_id})
+            style_dna = dict(default_style_dna)
+        else:
+            style_dna = json.loads(row["style_dna"]) if row.get("style_dna") else dict(default_style_dna)
+            if not isinstance(style_dna, dict):
+                style_dna = dict(default_style_dna)
+
+        # Merge Learning DNA from user_settings (Onboarding page) so synthesis gets formats + tone
+        settings_row = await conn.fetchrow(
+            "SELECT study_preferences FROM user_settings WHERE user_id = $1", user_id
+        )
+        if settings_row and settings_row.get("study_preferences"):
+            prefs = settings_row["study_preferences"]
+            if isinstance(prefs, str):
+                try:
+                    prefs = json.loads(prefs)
+                except Exception:
+                    prefs = {}
+            if isinstance(prefs, dict):
+                if "formats" in prefs and prefs["formats"] is not None:
+                    style_dna["formats"] = prefs["formats"]
+                    logger.info("get_profile merged formats from Learning DNA", extra={"user_id": user_id, "formats": prefs["formats"]})
+                if "cognitive_tone" in prefs and prefs["cognitive_tone"]:
+                    style_dna["tone"] = prefs["cognitive_tone"]
+
+        if not row:
             return {
                 "status": "success",
                 "user_id": user_id,
-                "style_dna": {"format_pref": "outline", "tone": "eli5", "uses_emoji": False, "prefers_diagrams": True},
+                "style_dna": style_dna,
                 "goals": [],
                 "profile_version": 1,
                 "is_default": True
@@ -137,7 +163,7 @@ async def _get_profile_async(user_id: str) -> Dict[str, Any]:
             "status": "success",
             "user_id": row["user_id"],
             "display_name": row.get("display_name"),
-            "style_dna": json.loads(row["style_dna"]) if row.get("style_dna") else None,
+            "style_dna": style_dna,
             "goals": json.loads(row["goals"]) if row.get("goals") else [],
             "calendar_context": json.loads(row["calendar_context"]) if row.get("calendar_context") else None,
             "profile_version": row.get("profile_version", 1)
