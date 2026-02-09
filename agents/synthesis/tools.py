@@ -640,10 +640,78 @@ async def _list_artifacts_async(user_id: str, artifact_type: str) -> Dict[str, A
         await conn.close()
 
 
+async def _generate_script_async(content: str, topic: str, acts: List[Dict]) -> List[str]:
+    """
+    Generate a cinematic script for the video segments using Gemini.
+    """
+    client = _get_genai_client()
+    if not client:
+        return []
+        
+    total_segments = sum(act['segments'] for act in acts)
+    
+    # Build prompt structure
+    structure_desc = []
+    for act in acts:
+        structure_desc.append(f"- Act {act['act']} ({act['style']}): {act['segments']} segments. "
+                              f"Visual Style: {act['veo_mode']['visual_style']}")
+    
+    structure_text = "\\n".join(structure_desc)
+    
+    prompt = f"""You are an award-winning cinematic director for an educational video series.
+    
+Topic: {topic}
+Source Material:
+{content[:3000]}
+
+Video Structure:
+{structure_text}
+
+Task:
+Write a visual narrative script for the {total_segments} video segments.
+Each segment is 8 seconds long.
+The narrative should be purely VISUAL and ACTION-based descriptions for a video generation model.
+Do not include camera angles or lighting (those are handled elsewhere).
+Focus on the objects, motion, and transition of ideas.
+
+Output Requirement:
+Return ONLY a raw JSON list of strings.
+Example: ["A red ball drops...", "The ball turns into a planet...", "Map zooms out..."]
+Length: Exactly {total_segments} strings.
+"""
+
+    try:
+        # Use sync call in thread pool if needed, or async if client supports it.
+        # Here we assume client.aio is available or use run_async wrapper if sync.
+        # Simpler: use the synchronous client inside _run_async wrapper if needed, 
+        # but here we can just use the tool's pattern.
+        # Actually tools.py uses _run_async for other things. 
+        # But here we are already inside an async function.
+        # Let's use the sync method wrapped in _run_async to be safe with this client setup.
+        
+        response = _run_async(lambda: client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt,
+            config={'response_mime_type': 'application/json'}
+        ))
+        
+        script = json.loads(response.text)
+        if isinstance(script, list) and len(script) > 0:
+            logger.info(f"Generated script with {len(script)} segments")
+            return script
+        else:
+            logger.warning("Gemini returned invalid script format")
+            return []
+            
+    except Exception as e:
+        logger.error(f"Gemini script generation failed: {e}")
+        return []
+
+
 def generate_video(
     artifact_id: str,
     user_id: str,
-    total_duration: int = 120  # Start with 2 minutes for testing
+    total_duration: int = 300  # Default to 5 minutes for full depth
 ) -> Dict[str, Any]:
     """
     Generate educational video for an artifact using Veo 3.
@@ -724,13 +792,22 @@ async def _generate_video_async(artifact_id: str, user_id: str, total_duration: 
             "generating"
         )
         
-        # 6. Create segment records with optimized prompts
-        segment_index = 0
+        # 6. Generate Script using Gemini (The "Director")
+        try:
+            script_narratives = await _generate_script_async(content, topic, acts)
+        except Exception as e:
+            logger.error(f"Script generation failed, using fallbacks: {e}")
+            script_narratives = []
+        
+        # 7. Create segment records with optimized prompts
+        segment_global_index = 0
         for act in acts:
             for i in range(act['segments']):
-                # Generate narrative for this segment
-                # TODO: In production, use LLM to generate actual narrative
-                narrative = f"Segment {i+1} of {act['segments']}: Exploring {topic} through {act['style']} perspective"
+                # Get narrative from script or fallback
+                if segment_global_index < len(script_narratives):
+                    narrative = script_narratives[segment_global_index]
+                else:
+                    narrative = f"Segment {i+1} of {act['segments']}: Exploring {topic} through {act['style']} perspective"
                 
                 # Build optimized prompt using Triad Formula
                 prompt = build_optimized_prompt(
@@ -751,16 +828,16 @@ async def _generate_video_async(artifact_id: str, user_id: str, total_duration: 
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     """,
                     video_id,
-                    segment_index,
+                    segment_global_index,
                     act['act'],
                     act['style'],
-                    f"storage/video/{artifact_id}_seg_{segment_index}.mp4",
+                    f"storage/video/{artifact_id}_seg_{segment_global_index}.mp4",
                     8,
                     0,
                     prompt,
                     "pending"
                 )
-                segment_index += 1
+                segment_global_index += 1
         
         logger.info(f"Created video generation job with {segment_index} segments", extra={
             "video_id": str(video_id),
