@@ -6,9 +6,10 @@ interface AudioPlayerProps {
     title: string;
     subtitle?: string;
     artifactId?: string;
+    requested?: boolean;
 }
 
-export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayerProps) {
+export default function AudioPlayer({ title, subtitle, artifactId, requested = true }: AudioPlayerProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -19,8 +20,21 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
 
     // Poll for audio metadata
     useEffect(() => {
+        setAudioUrl(null);
+        setCurrentTime(0);
+        setDuration(0);
+        setLoading(true);
+        setError(null);
+
+        if (!requested) {
+            setLoading(false);
+            setError(null);
+            return;
+        }
+
         if (!artifactId) {
             setLoading(false);
+            setError('Audio request pending artifact');
             return;
         }
 
@@ -32,11 +46,15 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
             try {
                 const metadata = await getAudioMetadata(artifactId);
 
-                if (metadata.status === 'ready' && metadata.audio_url) {
+                if (metadata.audio_url) {
                     // Extract filename from audio_url
                     const filename = metadata.audio_url.split('/').pop();
                     setAudioUrl(getAudioUrl(filename));
                     setDuration(metadata.duration_seconds || 0);
+                    setLoading(false);
+                    clearInterval(pollInterval);
+                } else if (metadata.status === 'failed') {
+                    setError('Audio generation failed');
                     setLoading(false);
                     clearInterval(pollInterval);
                 } else if (attempts >= maxAttempts) {
@@ -65,7 +83,7 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
         return () => {
             if (pollInterval) clearInterval(pollInterval);
         };
-    }, [artifactId]);
+    }, [artifactId, requested]);
 
     // Handle audio element events
     useEffect(() => {
@@ -125,9 +143,22 @@ export default function AudioPlayer({ title, subtitle, artifactId }: AudioPlayer
         setCurrentTime(newTime);
     };
 
-    // Don't show player if no artifactId provided
+    if (!requested) {
+        return (
+            <div className="bg-gray-900 rounded-xl overflow-hidden shadow-lg text-white mb-8 p-6">
+                <h3 className="text-base font-bold mb-2">{title}</h3>
+                <p className="text-sm text-gray-300">No audio requested</p>
+            </div>
+        );
+    }
+
     if (!artifactId) {
-        return null;
+        return (
+            <div className="bg-gray-900 rounded-xl overflow-hidden shadow-lg text-white mb-8 p-6">
+                <h3 className="text-base font-bold mb-2">{title}</h3>
+                <p className="text-sm text-gray-300">Audio request pending artifact</p>
+            </div>
+        );
     }
 
     return (

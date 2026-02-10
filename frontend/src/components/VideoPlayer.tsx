@@ -5,9 +5,10 @@ import { getVideoMetadata, getVideoUrl } from '../api/client'
 interface VideoPlayerProps {
     title: string
     artifactId?: string
+    requested?: boolean
 }
 
-export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
+export default function VideoPlayer({ title, artifactId, requested = true }: VideoPlayerProps) {
     const [videoUrl, setVideoUrl] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -23,8 +24,22 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
     };
 
     useEffect(() => {
+        setVideoUrl(null)
+        setProgress(0)
+        setStatusText('Initializing video...')
+        setLoading(true)
+        setError(null)
+
+        if (!requested) {
+            setLoading(false)
+            setError(null)
+            setStatusText('No video requested')
+            return
+        }
+
         if (!artifactId) {
             setLoading(false)
+            setError('Video request pending artifact')
             return
         }
 
@@ -93,7 +108,25 @@ export default function VideoPlayer({ title, artifactId }: VideoPlayerProps) {
         return () => {
             if (currentPollInterval) clearInterval(currentPollInterval)
         }
-    }, [artifactId])
+    }, [artifactId, requested])
+
+    if (!requested) {
+        return (
+            <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col items-center justify-center min-h-[200px]">
+                <p className="text-gray-900 font-medium mb-1">No video requested</p>
+                <p className="text-gray-500 text-sm">Request a video from this note to start generation.</p>
+            </div>
+        )
+    }
+
+    if (!artifactId) {
+        return (
+            <div className="bg-white rounded-xl shadow-sm p-6 flex flex-col items-center justify-center min-h-[200px]">
+                <p className="text-gray-900 font-medium mb-1">Video request pending artifact</p>
+                <p className="text-gray-500 text-sm">Try again once note processing finishes.</p>
+            </div>
+        )
+    }
 
     if (loading) {
         return (

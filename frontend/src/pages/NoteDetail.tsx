@@ -53,7 +53,7 @@ export default function NoteDetail() {
                     source_id: response?.source_id,
                 });
                 const text = `${response?.title || ''} ${response?.description || ''}`.toLowerCase();
-                const requestedVideo = text.includes('video');
+                const requestedVideo = text.includes('video') || Boolean(response?.has_video);
                 if (response?.has_video) {
                     setVideoStatus('ready');
                     setVideoStatusDetail('Ready to play');
@@ -65,7 +65,7 @@ export default function NoteDetail() {
                     setVideoStatusDetail('Waiting for artifact');
                 } else {
                     setVideoStatus('not_requested');
-                    setVideoStatusDetail(null);
+                    setVideoStatusDetail('No video requested');
                 }
                 setNote(response || null);
             } catch (error) {
@@ -109,7 +109,11 @@ export default function NoteDetail() {
     }, [note, userId]);
 
     const mediaArtifactId = note?.artifact_id || undefined;
-    const noteRequestedVideo = Boolean(note && `${note.title || ''} ${note.description || ''}`.toLowerCase().includes('video'));
+    const noteText = `${note?.title || ''} ${note?.description || ''}`.toLowerCase();
+    const noteRequestedVideo = Boolean(note && (noteText.includes('video') || note.has_video));
+    const noteRequestedAudio = Boolean(
+        note && (noteText.includes('audio') || note.has_audio || String(note.note_type || '').toLowerCase() === 'audio')
+    );
 
     useEffect(() => {
         if (!mediaArtifactId || !noteRequestedVideo) return;
@@ -189,7 +193,7 @@ export default function NoteDetail() {
             case 'failed':
                 return 'Video: Failed';
             default:
-                return 'Video: Not Requested';
+                return 'Video: No Video Requested';
         }
     })();
 
@@ -208,6 +212,18 @@ export default function NoteDetail() {
                 return 'bg-gray-100 text-gray-700';
         }
     })();
+
+    const audioStatusLabel = note?.has_audio
+        ? 'Audio: Ready'
+        : noteRequestedAudio
+            ? 'Audio: Requested'
+            : 'Audio: No Audio Requested';
+
+    const audioStatusClass = note?.has_audio
+        ? 'bg-green-100 text-green-800'
+        : noteRequestedAudio
+            ? 'bg-yellow-100 text-yellow-800'
+            : 'bg-gray-100 text-gray-700';
 
     const handleRetryVideo = async () => {
         if (!note?.artifact_id || !userId || isRetryingVideo) return;
@@ -292,6 +308,9 @@ export default function NoteDetail() {
                             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${videoStatusClass}`}>
                                 {videoStatusLabel}
                             </span>
+                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${audioStatusClass}`}>
+                                {audioStatusLabel}
+                            </span>
                             {videoStatusDetail && (
                                 <span className="text-xs text-gray-500">{videoStatusDetail}</span>
                             )}
@@ -344,10 +363,12 @@ export default function NoteDetail() {
                         title={note.title || 'Learning Audio'}
                         subtitle={note.description}
                         artifactId={mediaArtifactId}
+                        requested={noteRequestedAudio}
                     />
                     <VideoPlayer
                         title={`${note.title || 'Learning'} - Video`}
                         artifactId={mediaArtifactId}
+                        requested={noteRequestedVideo}
                     />
                     <QuickNotes
                         activeSection={activeSection}
