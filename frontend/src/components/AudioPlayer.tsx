@@ -7,9 +7,10 @@ interface AudioPlayerProps {
     subtitle?: string;
     artifactId?: string;
     requested?: boolean;
+    onReady?: () => void;
 }
 
-export default function AudioPlayer({ title, subtitle, artifactId, requested = true }: AudioPlayerProps) {
+export default function AudioPlayer({ title, subtitle, artifactId, requested = true, onReady }: AudioPlayerProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
@@ -53,6 +54,7 @@ export default function AudioPlayer({ title, subtitle, artifactId, requested = t
                     setDuration(metadata.duration_seconds || 0);
                     setLoading(false);
                     clearInterval(pollInterval);
+                    onReady?.();
                 } else if (metadata.status === 'failed') {
                     setError('Audio generation failed');
                     setLoading(false);
@@ -83,7 +85,7 @@ export default function AudioPlayer({ title, subtitle, artifactId, requested = t
         return () => {
             if (pollInterval) clearInterval(pollInterval);
         };
-    }, [artifactId, requested]);
+    }, [artifactId, requested, onReady]);
 
     // Handle audio element events
     useEffect(() => {

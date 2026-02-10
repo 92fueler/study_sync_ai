@@ -336,6 +336,14 @@ export const getAudioMetadata = async (artifactId: string) => {
   return response.data
 }
 
+export const generateAudio = async (
+  artifactId: string,
+  payload?: { voice_name?: string; cognitive_tone?: string }
+) => {
+  const response = await apiClient.post(`/audio/generate/${artifactId}`, payload || {})
+  return response.data
+}
+
 export const getAudioUrl = (filename: string) => {
   return `${API_BASE_URL}/audio/${filename}`
 }

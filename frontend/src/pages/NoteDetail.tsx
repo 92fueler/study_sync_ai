@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, ArrowLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import AudioPlayer from '../components/AudioPlayer';
 import VideoPlayer from '../components/VideoPlayer';
 import QuickNotes from '../components/QuickNotes';
 import ProgressRoadmap from '../components/ProgressRoadmap';
-import { generateVideo, getNote, getVideoMetadata } from '../api/client';
+import { generateAudio, generateVideo, getNote, getVideoMetadata } from '../api/client';
 
 type VideoGenerationStatus = 'not_requested' | 'requesting' | 'queued' | 'generating' | 'ready' | 'failed';
 
@@ -32,6 +32,7 @@ export default function NoteDetail() {
     const [videoStatus, setVideoStatus] = useState<VideoGenerationStatus>('not_requested');
     const [videoStatusDetail, setVideoStatusDetail] = useState<string | null>(null);
     const [isRetryingVideo, setIsRetryingVideo] = useState(false);
+    const audioTriggerArtifactRef = useRef<string | null>(null);
 
     const formatVideoError = (message?: string | null) => {
         if (!message) return 'Generation failed';
@@ -55,6 +56,7 @@ export default function NoteDetail() {
 
     useEffect(() => {
         if (!id || !userId) return;
+        audioTriggerArtifactRef.current = null;
         const loadNote = async () => {
             try {
                 setLoading(true);
@@ -122,9 +124,41 @@ export default function NoteDetail() {
         void trigger();
     }, [note, userId]);
 
+    useEffect(() => {
+        if (!note || !userId || !note.artifact_id || note.has_audio) return;
+        const requestedAudio = inferAudioRequested(note);
+        if (!requestedAudio) return;
+        if (audioTriggerArtifactRef.current === note.artifact_id) return;
+
+        audioTriggerArtifactRef.current = note.artifact_id;
+
+        const trigger = async () => {
+            try {
+                console.log('[NoteDetail] triggering audio generation', {
+                    note_id: note.id,
+                    artifact_id: note.artifact_id,
+                    user_id: userId,
+                });
+                await generateAudio(note.artifact_id, {});
+                console.log('[NoteDetail] audio request accepted', {
+                    note_id: note.id,
+                    artifact_id: note.artifact_id,
+                });
+            } catch (error) {
+                console.error('[NoteDetail] failed to trigger audio generation', error);
+                audioTriggerArtifactRef.current = null;
+            }
+        };
+
+        void trigger();
+    }, [note, userId]);
+
     const mediaArtifactId = note?.artifact_id || undefined;
     const noteRequestedVideo = inferVideoRequested(note);
     const noteRequestedAudio = inferAudioRequested(note);
+    const handleAudioReady = useCallback(() => {
+        setNote((prev: any) => (prev ? { ...prev, has_audio: true } : prev));
+    }, []);
 
     useEffect(() => {
         if (!mediaArtifactId || !noteRequestedVideo) return;
@@ -375,6 +409,7 @@ export default function NoteDetail() {
                         subtitle={note.description}
                         artifactId={mediaArtifactId}
                         requested={noteRequestedAudio}
+                        onReady={handleAudioReady}
                     />
                     <VideoPlayer
                         title={`${note.title || 'Learning'} - Video`}
