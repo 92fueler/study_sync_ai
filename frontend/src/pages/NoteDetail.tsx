@@ -9,6 +9,20 @@ import { generateVideo, getNote, getVideoMetadata } from '../api/client';
 
 type VideoGenerationStatus = 'not_requested' | 'requesting' | 'queued' | 'generating' | 'ready' | 'failed';
 
+const inferVideoRequested = (candidate: any): boolean => {
+    if (!candidate) return false;
+    if (typeof candidate.video_requested === 'boolean') return candidate.video_requested;
+    const text = `${candidate.title || ''} ${candidate.description || ''}`.toLowerCase();
+    return text.includes('video') || Boolean(candidate.has_video) || String(candidate.note_type || '').toLowerCase() === 'video';
+};
+
+const inferAudioRequested = (candidate: any): boolean => {
+    if (!candidate) return false;
+    if (typeof candidate.audio_requested === 'boolean') return candidate.audio_requested;
+    const text = `${candidate.title || ''} ${candidate.description || ''}`.toLowerCase();
+    return text.includes('audio') || Boolean(candidate.has_audio) || String(candidate.note_type || '').toLowerCase() === 'audio';
+};
+
 export default function NoteDetail() {
     const { id } = useParams<{ id: string }>();
     const [userId, setUserId] = useState('');
@@ -50,10 +64,11 @@ export default function NoteDetail() {
                     artifact_id: response?.artifact_id,
                     has_video: response?.has_video,
                     has_audio: response?.has_audio,
+                    video_requested: response?.video_requested,
+                    audio_requested: response?.audio_requested,
                     source_id: response?.source_id,
                 });
-                const text = `${response?.title || ''} ${response?.description || ''}`.toLowerCase();
-                const requestedVideo = text.includes('video') || Boolean(response?.has_video);
+                const requestedVideo = inferVideoRequested(response);
                 if (response?.has_video) {
                     setVideoStatus('ready');
                     setVideoStatusDetail('Ready to play');
@@ -82,8 +97,7 @@ export default function NoteDetail() {
 
     useEffect(() => {
         if (!note || !userId || !note.artifact_id || note.has_video) return;
-        const text = `${note.title || ''} ${note.description || ''}`.toLowerCase();
-        const requestedVideo = text.includes('video');
+        const requestedVideo = inferVideoRequested(note);
         if (!requestedVideo) return;
 
         const trigger = async () => {
@@ -109,11 +123,8 @@ export default function NoteDetail() {
     }, [note, userId]);
 
     const mediaArtifactId = note?.artifact_id || undefined;
-    const noteText = `${note?.title || ''} ${note?.description || ''}`.toLowerCase();
-    const noteRequestedVideo = Boolean(note && (noteText.includes('video') || note.has_video));
-    const noteRequestedAudio = Boolean(
-        note && (noteText.includes('audio') || note.has_audio || String(note.note_type || '').toLowerCase() === 'audio')
-    );
+    const noteRequestedVideo = inferVideoRequested(note);
+    const noteRequestedAudio = inferAudioRequested(note);
 
     useEffect(() => {
         if (!mediaArtifactId || !noteRequestedVideo) return;

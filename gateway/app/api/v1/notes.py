@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 import json
 import asyncio
 import hashlib
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
@@ -18,6 +19,7 @@ from app.db import fetch, fetchrow
 from app.a2a.client import get_a2a_client
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class NoteCreate(BaseModel):
@@ -42,17 +44,32 @@ class NoteUpdate(BaseModel):
     source_id: Optional[str] = None
 
 
+def _derive_media_requested(note: Dict[str, Any]) -> Dict[str, bool]:
+    note_type = str(note.get("note_type") or "").lower()
+    text = f"{note.get('title') or ''} {note.get('description') or ''}".lower()
+    has_audio = bool(note.get("has_audio"))
+    has_video = bool(note.get("has_video"))
+
+    return {
+        "audio_requested": ("audio" in text) or note_type == "audio" or has_audio,
+        "video_requested": ("video" in text) or note_type == "video" or has_video,
+    }
+
+
 def _note_row_to_dict(row) -> Dict[str, Any]:
     note = dict(row)
     note["id"] = str(note["id"])
+    if note.get("artifact_id") is not None:
+        note["artifact_id"] = str(note["artifact_id"])
     note["created_at"] = note.get("created_at")
     if isinstance(note.get("tags"), str):
         try:
             note["tags"] = json.loads(note["tags"])
         except Exception:
             pass
-    note["has_audio"] = note.get("has_audio", False)
-    note["has_video"] = note.get("has_video", False)
+    note["has_audio"] = bool(note.get("has_audio", False))
+    note["has_video"] = bool(note.get("has_video", False))
+    note.update(_derive_media_requested(note))
     return note
 
 
@@ -197,8 +214,28 @@ async def list_notes(
 
     query = f"""
         SELECT n.*,
-               EXISTS(SELECT 1 FROM audio_artifacts a WHERE a.artifact_id = n.id) as has_audio,
-               EXISTS(SELECT 1 FROM video_artifacts v WHERE v.artifact_id = n.id) as has_video
+               (
+                   SELECT a.id
+                   FROM artifacts a
+                   WHERE n.source_id IS NOT NULL
+                     AND a.content_ids::text ILIKE '%' || n.source_id::text || '%'
+                   ORDER BY a.created_at DESC
+                   LIMIT 1
+               ) AS artifact_id,
+               EXISTS(
+                   SELECT 1
+                   FROM artifacts a
+                   JOIN audio_artifacts aa ON aa.artifact_id = a.id
+                   WHERE n.source_id IS NOT NULL
+                     AND a.content_ids::text ILIKE '%' || n.source_id::text || '%'
+               ) as has_audio,
+               EXISTS(
+                   SELECT 1
+                   FROM artifacts a
+                   JOIN video_artifacts v ON v.artifact_id = a.id
+                   WHERE n.source_id IS NOT NULL
+                     AND a.content_ids::text ILIKE '%' || n.source_id::text || '%'
+               ) as has_video
         FROM learning_notes n
         WHERE {' AND '.join(filters)}
         ORDER BY created_at DESC
@@ -260,7 +297,33 @@ async def list_note_topics(user_id: str = Query(...)):
 @router.get("/{note_id}")
 async def get_note(note_id: str, user_id: str = Query(...)):
     """Get a single note by id."""
-    query = "SELECT * FROM learning_notes WHERE id = $1 AND user_id = $2"
+    query = """
+        SELECT n.*,
+               (
+                   SELECT a.id
+                   FROM artifacts a
+                   WHERE n.source_id IS NOT NULL
+                     AND a.content_ids::text ILIKE '%' || n.source_id::text || '%'
+                   ORDER BY a.created_at DESC
+                   LIMIT 1
+               ) AS artifact_id,
+               EXISTS(
+                   SELECT 1
+                   FROM artifacts a
+                   JOIN audio_artifacts aa ON aa.artifact_id = a.id
+                   WHERE n.source_id IS NOT NULL
+                     AND a.content_ids::text ILIKE '%' || n.source_id::text || '%'
+               ) as has_audio,
+               EXISTS(
+                   SELECT 1
+                   FROM artifacts a
+                   JOIN video_artifacts v ON v.artifact_id = a.id
+                   WHERE n.source_id IS NOT NULL
+                     AND a.content_ids::text ILIKE '%' || n.source_id::text || '%'
+               ) as has_video
+        FROM learning_notes n
+        WHERE n.id = $1 AND n.user_id = $2
+    """
     try:
         row = await fetchrow(query, note_id, user_id)
     except RuntimeError as exc:
@@ -271,7 +334,20 @@ async def get_note(note_id: str, user_id: str = Query(...)):
     if not row:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    return _note_row_to_dict(row)
+    note = _note_row_to_dict(row)
+    logger.info(
+        "Fetched note detail",
+        extra={
+            "note_id": note.get("id"),
+            "user_id": user_id,
+            "artifact_id": note.get("artifact_id"),
+            "has_audio": note.get("has_audio"),
+            "has_video": note.get("has_video"),
+            "audio_requested": note.get("audio_requested"),
+            "video_requested": note.get("video_requested"),
+        },
+    )
+    return note
 
 
 @router.post("")
