@@ -23,6 +23,7 @@ if not logging.getLogger().handlers:
 
 # Lazy-initialized Gemini client
 _client = None
+VIDEO_SCRIPT_MODEL = os.getenv("VIDEO_SCRIPT_MODEL", "gemini-2.5-flash").strip()
 
 
 def _get_genai_client():
@@ -790,19 +791,13 @@ Length: Exactly {total_segments} strings.
 """
 
     try:
-        # Use sync call in thread pool if needed, or async if client supports it.
-        # Here we assume client.aio is available or use run_async wrapper if sync.
-        # Simpler: use the synchronous client inside _run_async wrapper if needed, 
-        # but here we can just use the tool's pattern.
-        # Actually tools.py uses _run_async for other things. 
-        # But here we are already inside an async function.
-        # Let's use the sync method wrapped in _run_async to be safe with this client setup.
-        
-        response = _run_async(lambda: client.models.generate_content(
-            model="gemini-1.5-flash",
+        # Run sync SDK call in a thread to avoid blocking the event loop.
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=VIDEO_SCRIPT_MODEL,
             contents=prompt,
-            config={'response_mime_type': 'application/json'}
-        ))
+            config={'response_mime_type': 'application/json'},
+        )
         
         script = json.loads(response.text)
         if isinstance(script, list) and len(script) > 0:
@@ -813,7 +808,7 @@ Length: Exactly {total_segments} strings.
             return []
             
     except Exception as e:
-        logger.error(f"Gemini script generation failed: {e}")
+        logger.error(f"Gemini script generation failed (model={VIDEO_SCRIPT_MODEL}): {e}")
         return []
 
 
